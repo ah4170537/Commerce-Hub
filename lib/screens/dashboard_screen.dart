@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../services/categories_repository.dart';
 import '../services/dashboard_data_source.dart';
+import '../services/orders_data_source.dart';
 import '../services/products_data_source.dart';
 import '../widgets/alert_banner.dart';
 import '../widgets/kpi_card.dart';
@@ -15,6 +16,7 @@ import '../widgets/custom_bottom_nav.dart';
 import 'products_screen.dart';
 import 'broadcast_screen.dart';
 import 'categories_screen.dart';
+import 'orders_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final DashboardDataSource? dataSource;
@@ -197,7 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         value: _formatCount(_pendingOrdersCount),
                         subtitle: 'Pending · not selected',
                         subtitleColor: AppColors.warning,
-                        onTap: () {},
+                        onTap: () => _openOrders(OrderStatusFilter.pending),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -259,12 +261,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onRouteCount: _onRouteOrdersCount,
                   deliveredCount: _deliveredOrdersCount,
                   onViewAll: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Navigating to all active orders...'),
-                        backgroundColor: AppColors.cardSurface,
-                      ),
-                    );
+                    _openOrders(OrderStatusFilter.all);
                   },
                 ),
                 const SizedBox(height: 20),
@@ -317,14 +314,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return AlertBanner(
       text:
           '$pendingCount new ${pendingCount == 1 ? 'order is' : 'orders are'} waiting for review',
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Opening pending orders for review...'),
-            backgroundColor: AppColors.cardSurface,
-          ),
-        );
-      },
+      onTap: () => _openOrders(OrderStatusFilter.pending),
+    );
+  }
+
+  void _openOrders(OrderStatusFilter filter) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OrdersScreen(initialFilter: filter),
+      ),
     );
   }
 

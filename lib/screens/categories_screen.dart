@@ -15,7 +15,9 @@ class CategoriesScreen extends StatefulWidget {
 class _CategoriesScreenState extends State<CategoriesScreen> {
   late final CategoriesRepository _repository;
   late final Stream<List<String>> _categoriesStream;
+  late final Stream<List<String>> _subCategoriesStream;
   final Set<String> _deletingCategories = {};
+  final Set<String> _deletingSubCategories = {};
   String? _operationError;
 
   @override
@@ -23,6 +25,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     super.initState();
     _repository = widget.repository ?? FirestoreCategoriesRepository();
     _categoriesStream = _repository.watchCategories();
+    _subCategoriesStream = _repository.watchSubCategories();
   }
 
   @override
@@ -60,7 +63,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               IconButton.filled(
                 tooltip: 'Add category',
                 onPressed: () => _showCategoryDialog(),
-                icon: const Icon(Icons.add_rounded),
+                icon: const Icon(Icons.category_outlined),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                tooltip: 'Add subcategory',
+                onPressed: () => _showSubCategoryDialog(),
+                icon: const Icon(Icons.label_outline_rounded),
               ),
             ],
           ),
@@ -88,25 +97,69 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 );
               }
 
-              final categories = snapshot.data!;
-              if (categories.isEmpty) {
-                return _message(
-                  'No categories yet. Add one to start organizing products.',
-                  Icons.category_outlined,
-                );
-              }
+              return StreamBuilder<List<String>>(
+                stream: _subCategoriesStream,
+                builder: (context, subCategorySnapshot) {
+                  if (subCategorySnapshot.hasError) {
+                    return _message(
+                      'Could not load subcategories.\n${subCategorySnapshot.error}',
+                      Icons.error_outline_rounded,
+                    );
+                  }
+                  if (!subCategorySnapshot.hasData) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primaryAccent,
+                      ),
+                    );
+                  }
 
-              return ListView.separated(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                itemCount: categories.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final category = categories[index];
-                  return _categoryCard(
-                    category,
-                    deleting: _deletingCategories.contains(category),
+                  final categories = snapshot.data!;
+                  final subCategories = subCategorySnapshot.data!;
+                  return ListView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    children: [
+                      _listSectionTitle('Categories'),
+                      if (categories.isEmpty)
+                        _emptySection('No categories yet.')
+                      else
+                        ...categories.map(
+                          (category) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _categoryCard(
+                              category,
+                              deleting: _deletingCategories.contains(category),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      _listSectionTitle('Subcategories'),
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 10),
+                        child: Text(
+                          'Managed independently from categories.',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      if (subCategories.isEmpty)
+                        _emptySection('No subcategories yet.')
+                      else
+                        ...subCategories.map(
+                          (subCategory) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _subCategoryCard(
+                              subCategory,
+                              deleting: _deletingSubCategories.contains(
+                                subCategory,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   );
                 },
               );
@@ -114,6 +167,30 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _listSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 17,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _emptySection(String message) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        message,
+        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+      ),
     );
   }
 
@@ -165,7 +242,77 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             ),
             IconButton(
               tooltip: 'Delete $category',
-              onPressed: deleting ? null : () => _confirmDeleteCategory(category),
+              onPressed: deleting
+                  ? null
+                  : () => _confirmDeleteCategory(category),
+              icon: deleting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.warning,
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _subCategoryCard(String subCategory, {required bool deleting}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.6)),
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: AppColors.primaryAccentMuted,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.label_outline_rounded,
+            color: AppColors.primaryAccentLight,
+          ),
+        ),
+        title: Text(
+          subCategory,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          deleting
+              ? 'Removing subcategory assignment from products...'
+              : 'Independent from categories',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Edit subcategory $subCategory',
+              onPressed: deleting
+                  ? null
+                  : () => _showSubCategoryDialog(subCategory: subCategory),
+              icon: const Icon(
+                Icons.edit_outlined,
+                color: AppColors.primaryAccentLight,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Delete subcategory $subCategory',
+              onPressed: deleting
+                  ? null
+                  : () => _confirmDeleteSubCategory(subCategory),
               icon: deleting
                   ? const SizedBox(
                       width: 20,
@@ -218,15 +365,61 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       await _repository.deleteCategory(category);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('"$category" and its products were deleted.'),
-        ),
+        SnackBar(content: Text('"$category" and its products were deleted.')),
       );
     } catch (error) {
       if (!mounted) return;
       setState(() => _operationError = 'Could not delete "$category": $error');
     } finally {
       if (mounted) setState(() => _deletingCategories.remove(category));
+    }
+  }
+
+  Future<void> _confirmDeleteSubCategory(String subCategory) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardSurface,
+        title: const Text('Delete subcategory?'),
+        content: Text(
+          'Deleting "$subCategory" removes it from the subcategory list and clears that subcategory from assigned products. Products will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.warning,
+              foregroundColor: AppColors.backgroundPrimary,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete subcategory'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete != true || !mounted) return;
+
+    setState(() {
+      _operationError = null;
+      _deletingSubCategories.add(subCategory);
+    });
+    try {
+      await _repository.deleteSubCategory(subCategory);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('"$subCategory" was deleted.')));
+    } catch (error) {
+      if (!mounted) return;
+      setState(
+        () => _operationError = 'Could not delete "$subCategory": $error',
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _deletingSubCategories.remove(subCategory));
+      }
     }
   }
 
@@ -381,6 +574,129 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         await _repository.addCategory(newName);
       } else {
         await _repository.renameCategory(oldName: oldName, newName: newName);
+      }
+      if (dialogContext.mounted) Navigator.pop(dialogContext, newName);
+    } catch (error) {
+      if (!dialogContext.mounted) return;
+      setDialogState(() {
+        resetSaving();
+        setError(error.toString());
+      });
+    }
+  }
+
+  Future<void> _showSubCategoryDialog({String? subCategory}) async {
+    var subCategoryName = subCategory ?? '';
+    String? errorMessage;
+    var saving = false;
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.cardSurface,
+          title: Text(
+            subCategory == null ? 'Add subcategory' : 'Edit subcategory',
+          ),
+          content: TextFormField(
+            initialValue: subCategory ?? '',
+            decoration: InputDecoration(
+              labelText: 'Subcategory name',
+              errorText: errorMessage,
+            ),
+            onChanged: (value) {
+              subCategoryName = value;
+              if (errorMessage != null) {
+                setDialogState(() => errorMessage = null);
+              }
+            },
+            autofocus: true,
+            enabled: !saving,
+            textCapitalization: TextCapitalization.words,
+            onFieldSubmitted: (value) {
+              subCategoryName = value;
+              if (!saving) {
+                setDialogState(() => saving = true);
+                _saveSubCategory(
+                  dialogContext,
+                  setDialogState,
+                  subCategoryName,
+                  subCategory,
+                  (error) => errorMessage = error,
+                  () => saving = false,
+                );
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () {
+                      setDialogState(() => saving = true);
+                      _saveSubCategory(
+                        dialogContext,
+                        setDialogState,
+                        subCategoryName,
+                        subCategory,
+                        (error) => errorMessage = error,
+                        () => saving = false,
+                      );
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() => _operationError = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            subCategory == null
+                ? 'Subcategory added.'
+                : 'Subcategory renamed and matching products updated.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveSubCategory(
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+    String value,
+    String? oldName,
+    void Function(String?) setError,
+    VoidCallback resetSaving,
+  ) async {
+    final newName = value.trim();
+    if (newName.isEmpty) {
+      setDialogState(() {
+        resetSaving();
+        setError('Enter a subcategory name.');
+      });
+      return;
+    }
+
+    try {
+      if (oldName == null) {
+        await _repository.addSubCategory(newName);
+      } else {
+        await _repository.renameSubCategory(oldName: oldName, newName: newName);
       }
       if (dialogContext.mounted) Navigator.pop(dialogContext, newName);
     } catch (error) {

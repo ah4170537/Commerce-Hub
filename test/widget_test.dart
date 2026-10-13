@@ -46,6 +46,10 @@ class _FakeCategoriesRepository implements CategoriesRepository {
   String? renamedFrom;
   String? renamedTo;
   String? deletedCategory;
+  String? addedSubCategory;
+  String? renamedSubCategoryFrom;
+  String? renamedSubCategoryTo;
+  String? deletedSubCategory;
 
   @override
   Stream<List<String>> watchCategories() =>
@@ -55,8 +59,23 @@ class _FakeCategoriesRepository implements CategoriesRepository {
   Future<List<String>> getCategories() async => ['components', 'featured'];
 
   @override
+  Stream<List<String>> watchSubCategories() =>
+      Stream.value(['headphones', 'machine_assembly']);
+
+  @override
+  Future<List<String>> getSubCategories() async => [
+    'headphones',
+    'machine_assembly',
+  ];
+
+  @override
   Future<void> addCategory(String name) async {
     addedName = name;
+  }
+
+  @override
+  Future<void> addSubCategory(String name) async {
+    addedSubCategory = name;
   }
 
   @override
@@ -69,8 +88,22 @@ class _FakeCategoriesRepository implements CategoriesRepository {
   }
 
   @override
+  Future<void> renameSubCategory({
+    required String oldName,
+    required String newName,
+  }) async {
+    renamedSubCategoryFrom = oldName;
+    renamedSubCategoryTo = newName;
+  }
+
+  @override
   Future<void> deleteCategory(String name) async {
     deletedCategory = name;
+  }
+
+  @override
+  Future<void> deleteSubCategory(String name) async {
+    deletedSubCategory = name;
   }
 }
 
@@ -311,9 +344,13 @@ void main() {
 
     await tester.enterText(find.byType(TextFormField).at(0), 'New headphones');
     await tester.enterText(find.byType(TextFormField).at(2), '4500');
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('components').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('machine_assembly').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save').first);
     await tester.pumpAndSettle();
@@ -321,6 +358,7 @@ void main() {
     expect(repository.createdFields?['name'], 'New headphones');
     expect(repository.createdFields?['price'], 4500);
     expect(repository.createdFields?['category'], 'components');
+    expect(repository.createdFields?['subCategory'], 'machine_assembly');
   });
 
   testWidgets('adds and renames categories from the category page', (
@@ -340,6 +378,32 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(repository.addedName, 'Best Selling');
+
+    await tester.tap(find.byTooltip('Add subcategory'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'Audio');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(repository.addedSubCategory, 'Audio');
+
+    await tester.tap(find.byTooltip('Edit subcategory headphones'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'Headphones');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(repository.renamedSubCategoryFrom, 'headphones');
+    expect(repository.renamedSubCategoryTo, 'Headphones');
+
+    await tester.tap(find.byTooltip('Delete subcategory machine_assembly'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete subcategory?'), findsOneWidget);
+    expect(
+      find.textContaining('Products will not be deleted.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Delete subcategory'));
+    await tester.pumpAndSettle();
+    expect(repository.deletedSubCategory, 'machine_assembly');
 
     await tester.tap(find.byTooltip('Edit featured'));
     await tester.pumpAndSettle();
@@ -417,9 +481,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('components').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('machine_assembly').last);
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextFormField).at(0), 'Updated headset');
@@ -429,6 +497,7 @@ void main() {
     expect(repository.savedProductId, 'prod-001');
     expect(repository.savedFields?['name'], 'Updated headset');
     expect(repository.savedFields?['category'], 'components');
+    expect(repository.savedFields?['subCategory'], 'machine_assembly');
     expect(repository.savedFields?['variants'], [
       {'name': 'Matte Black', 'price': 3000},
     ]);

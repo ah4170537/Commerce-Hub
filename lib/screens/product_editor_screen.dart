@@ -35,15 +35,16 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _priceController;
-  late final TextEditingController _subCategoryController;
   late final List<_VariantFields> _variants;
   late final List<_PartFields> _parts;
   late final List<_ExistingImage> _existingImages;
   final List<_NewImage> _newImages = [];
   List<String> _categories = [];
-  Object? _categoriesError;
+  List<String> _subCategories = [];
+  Object? _taxonomyError;
   bool _loadingCategories = true;
   String? _selectedCategory;
+  String? _selectedSubCategory;
   bool _saving = false;
 
   @override
@@ -62,7 +63,9 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
       text: product.price?.toString() ?? '',
     );
     _selectedCategory = widget.isCreating ? null : product.category;
-    _subCategoryController = TextEditingController(text: product.subCategory);
+    _selectedSubCategory = widget.isCreating || product.subCategory.isEmpty
+        ? null
+        : product.subCategory;
     _variants = product.variants
         .map(
           (variant) => _VariantFields(
@@ -91,7 +94,6 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
     _nameController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
-    _subCategoryController.dispose();
     for (final variant in _variants) {
       variant.dispose();
     }
@@ -137,7 +139,7 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
               numeric: true,
             ),
             _buildCategoryField(),
-            _textField(_subCategoryController, 'Subcategory'),
+            _buildSubCategoryField(),
             const SizedBox(height: 22),
             _sectionTitle('Product images'),
             const Text(
@@ -220,11 +222,11 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_categoriesError != null)
+          if (_taxonomyError != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
-                'Could not load categories: $_categoriesError',
+                'Could not load categories or subcategories: $_taxonomyError',
                 style: const TextStyle(color: AppColors.warning, fontSize: 12),
               ),
             ),
@@ -255,18 +257,63 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
     );
   }
 
+  Widget _buildSubCategoryField() {
+    final subCategoryNames = <String>{..._subCategories};
+    if (widget.product.subCategory.isNotEmpty) {
+      subCategoryNames.add(widget.product.subCategory);
+    }
+    final subCategories = subCategoryNames.toList()..sort();
+    final selectedSubCategory =
+        _selectedSubCategory != null &&
+            subCategories.contains(_selectedSubCategory)
+        ? _selectedSubCategory!
+        : '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('subcategories-${subCategories.join('\u0000')}'),
+        initialValue: selectedSubCategory,
+        isExpanded: true,
+        decoration: _inputDecoration('Subcategory (optional)'),
+        style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+        dropdownColor: AppColors.cardSurface,
+        items: [
+          const DropdownMenuItem(value: '', child: Text('None')),
+          ...subCategories.map(
+            (subCategory) => DropdownMenuItem(
+              value: subCategory,
+              child: Text(subCategory),
+            ),
+          ),
+        ],
+        onChanged: _saving
+            ? null
+            : (subCategory) => setState(() {
+                _selectedSubCategory = subCategory?.isEmpty == true
+                    ? null
+                    : subCategory;
+              }),
+      ),
+    );
+  }
+
   Future<void> _loadCategories() async {
     try {
-      final categories = await _categoriesRepository.getCategories();
+      final results = await Future.wait([
+        _categoriesRepository.getCategories(),
+        _categoriesRepository.getSubCategories(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _categories = categories;
+        _categories = results[0];
+        _subCategories = results[1];
         _loadingCategories = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _categoriesError = error;
+        _taxonomyError = error;
         _loadingCategories = false;
       });
     }
@@ -627,7 +674,7 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
         'description': _descriptionController.text.trim(),
         'price': price,
         'category': category,
-        'subCategory': _subCategoryController.text.trim(),
+        'subCategory': _selectedSubCategory ?? '',
         'variants': _variants
             .map(
               (variant) => {

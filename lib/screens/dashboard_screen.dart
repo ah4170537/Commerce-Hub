@@ -42,6 +42,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int? _pendingOrdersCount;
   int? _onRouteOrdersCount;
   int? _deliveredOrdersCount;
+  bool _isOpeningOrders = false;
   late final CategoriesRepository _categoriesRepository;
   Object? _usersError;
   Object? _ordersError;
@@ -100,46 +101,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: AppColors.backgroundPrimary,
       body: SafeArea(
         bottom: false,
-        child: IndexedStack(
-          index: _currentTab,
+        child: Stack(
           children: [
-            // Tab 0: Dashboard Overview
-            _buildDashboardView(),
+            IndexedStack(
+              index: _currentTab,
+              children: [
+                // Tab 0: Dashboard Overview
+                _buildDashboardView(),
 
-            // Tab 1: Products / Inventory
-            if (_visitedTabs.contains(1))
-              ProductsScreen(
-                dataSource: widget.productsDataSource,
-                categoriesRepository: _categoriesRepository,
-              )
-            else
-              const SizedBox.shrink(),
+                // Tab 1: Products / Inventory
+                if (_visitedTabs.contains(1))
+                  ProductsScreen(
+                    dataSource: widget.productsDataSource,
+                    categoriesRepository: _categoriesRepository,
+                  )
+                else
+                  const SizedBox.shrink(),
 
-            // Tab 2: Product categories
-            if (_visitedTabs.contains(2))
-              CategoriesScreen(repository: _categoriesRepository)
-            else
-              const SizedBox.shrink(),
+                // Tab 2: Product categories
+                if (_visitedTabs.contains(2))
+                  CategoriesScreen(repository: _categoriesRepository)
+                else
+                  const SizedBox.shrink(),
 
-            // Tab 3: Riders (Placeholder for next screen)
-            if (_visitedTabs.contains(3))
-              _buildPlaceholderView(
-              title: 'Riders Control',
-              subtitle: 'Manage rider fleet, active routes & documents',
-              icon: Icons.two_wheeler_rounded,
-              )
-            else
-              const SizedBox.shrink(),
+                // Tab 3: Riders (Placeholder for next screen)
+                if (_visitedTabs.contains(3))
+                  _buildPlaceholderView(
+                    title: 'Riders Control',
+                    subtitle: 'Manage rider fleet, active routes & documents',
+                    icon: Icons.two_wheeler_rounded,
+                  )
+                else
+                  const SizedBox.shrink(),
 
-            // Tab 4: Customers (Placeholder for next screen)
-            if (_visitedTabs.contains(4))
-              _buildPlaceholderView(
-              title: 'Customer Management',
-              subtitle: 'Manage registered users, order histories & disputes',
-              icon: Icons.people_outline_rounded,
-              )
-            else
-              const SizedBox.shrink(),
+                // Tab 4: Customers (Placeholder for next screen)
+                if (_visitedTabs.contains(4))
+                  _buildPlaceholderView(
+                    title: 'Customer Management',
+                    subtitle:
+                        'Manage registered users, order histories & disputes',
+                    icon: Icons.people_outline_rounded,
+                  )
+                else
+                  const SizedBox.shrink(),
+              ],
+            ),
+            if (_isOpeningOrders)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: AppColors.backgroundPrimary.withValues(alpha: 0.88),
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          color: AppColors.primaryAccent,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Opening orders...',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -176,8 +206,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  "Monday, October 12 · Today's operations",
+                Text(
+                  "${_formatDashboardDate(DateTime.now())} · Today's operations",
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,
@@ -260,6 +290,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   pendingCount: _pendingOrdersCount,
                   onRouteCount: _onRouteOrdersCount,
                   deliveredCount: _deliveredOrdersCount,
+                  isLoading: _isOpeningOrders,
                   onViewAll: () {
                     _openOrders(OrderStatusFilter.all);
                   },
@@ -274,6 +305,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _formatCount(int? count) => count?.toString() ?? '—';
+
+  String _formatDashboardDate(DateTime date) {
+    const weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return '${weekdays[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}';
+  }
 
   void _selectTab(int index) {
     setState(() {
@@ -318,13 +377,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _openOrders(OrderStatusFilter filter) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => OrdersScreen(initialFilter: filter),
-      ),
-    );
+  Future<void> _openOrders(OrderStatusFilter filter) async {
+    if (_isOpeningOrders || !mounted) return;
+
+    setState(() => _isOpeningOrders = true);
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OrdersScreen(initialFilter: filter),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isOpeningOrders = false);
+      }
+    }
   }
 
   /// Top Hub App Bar for Dashboard

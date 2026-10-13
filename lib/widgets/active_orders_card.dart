@@ -4,6 +4,7 @@ import '../constants/app_colors.dart';
 
 class ActiveOrdersCard extends StatelessWidget {
   final VoidCallback? onViewAll;
+  final bool isLoading;
   final int? pendingCount;
   final int? onRouteCount;
   final int? deliveredCount;
@@ -11,6 +12,7 @@ class ActiveOrdersCard extends StatelessWidget {
   const ActiveOrdersCard({
     super.key,
     this.onViewAll,
+    this.isLoading = false,
     required this.pendingCount,
     required this.onRouteCount,
     required this.deliveredCount,
@@ -45,18 +47,41 @@ class ActiveOrdersCard extends StatelessWidget {
                 ),
               ),
               InkWell(
-                onTap: onViewAll,
+                onTap: isLoading ? null : onViewAll,
                 borderRadius: BorderRadius.circular(6),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Text(
-                    'View all',
-                    style: TextStyle(
-                      color: AppColors.primaryAccentLight,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: isLoading
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primaryAccentLight,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              'Loading...',
+                              style: TextStyle(
+                                color: AppColors.primaryAccentLight,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        )
+                      : const Text(
+                          'View all',
+                          style: TextStyle(
+                            color: AppColors.primaryAccentLight,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                 ),
               ),
             ],

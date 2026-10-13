@@ -25,8 +25,10 @@ class DashboardOrderCounts {
 
       switch (status) {
         case 'placed':
+        case 'pending':
           pending++;
         case 'out for delivery':
+        case 'on route':
           onRoute++;
         case 'delivered':
           delivered++;
@@ -63,10 +65,13 @@ class FirestoreDashboardDataSource implements DashboardDataSource {
 
   @override
   Stream<DashboardOrderCounts> watchOrderCounts() {
-    return _firestore.collectionGroup('user_orders').snapshots().map(
-      (snapshot) => DashboardOrderCounts.fromStatuses(
-        snapshot.docs.map((order) => order.data()['status']),
-      ),
-    );
+    return _firestore
+        .collectionGroup('user_orders')
+        .snapshots()
+        .map(
+          (snapshot) => DashboardOrderCounts.fromStatuses(
+            snapshot.docs.map((order) => order.data()['status']),
+          ),
+        );
   }
 }

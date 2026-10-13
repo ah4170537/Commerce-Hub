@@ -1,7 +1,25 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:commerce_hub/services/dashboard_data_source.dart';
 import 'package:commerce_hub/services/orders_data_source.dart';
 
 void main() {
+  group('DashboardOrderCounts.fromStatuses', () {
+    test('counts all pending and on-route status labels consistently', () {
+      final counts = DashboardOrderCounts.fromStatuses([
+        'Placed',
+        'Pending',
+        'Out for delivery',
+        'On route',
+        'Delivered',
+      ]);
+
+      expect(counts.total, 5);
+      expect(counts.pending, 2);
+      expect(counts.onRoute, 2);
+      expect(counts.delivered, 1);
+    });
+  });
+
   group('StoreOrder.fromDocument', () {
     test('parses order product details and calculates line totals', () {
       final order = StoreOrder.fromDocument('order-123', {
@@ -30,6 +48,7 @@ void main() {
       expect(order.items[0].lineTotal, 1000);
       expect(order.items[0].parts, hasLength(1));
       expect(order.items[0].parts[0].name, 'Beans');
+      expect(order.items[0].parts[0].quantity, 1);
       expect(order.items[0].parts[0].specs, 'Dark roast');
       expect(order.items[0].parts[0].price, 300);
       expect(order.items[1].unitPrice, 250);
@@ -53,7 +72,55 @@ void main() {
 
       expect(order.items.single.name, 'Gift box');
       expect(order.items.single.parts.single.name, 'Ribbon');
+      expect(order.items.single.parts.single.quantity, 1);
       expect(order.items.single.parts.single.price, 20);
+    });
+
+    test('reads customer, address, and rider details', () {
+      final order = StoreOrder.fromDocument('delivery-123', {
+        'status': 'On route',
+        'fullName': 'Ahmad Haseeb',
+        'email': 'alex@example.com',
+        'phone': '555-0100',
+        'address': 'F66W+XJV, Ali Town Lahore, Pakistan',
+        'city': 'Lahore',
+        'country': 'Pakistan',
+        'state': 'Punjab',
+        'postalCode': '12453',
+        'riderUid': 'rider-7',
+      });
+
+      expect(order.customerName, 'Ahmad Haseeb');
+      expect(order.customerEmail, 'alex@example.com');
+      expect(order.customerPhone, '555-0100');
+      expect(
+        order.deliveryAddress,
+        'F66W+XJV, Ali Town Lahore, Pakistan, Punjab, 12453',
+      );
+      expect(order.riderId, 'rider-7');
+    });
+  });
+
+  group('RiderDetails.fromDocument', () {
+    test('reads rider contact and vehicle fields from the rider document', () {
+      final rider = RiderDetails.fromDocument('rider-7', {
+        'uid': 'rider-7',
+        'fullName': 'Bilal',
+        'phone': '+923123210230',
+        'secondaryPhone': '',
+        'email': 'bilal@example.com',
+        'bikeModel': 'honda cd 70',
+        'bikeNumber': 'LHE1212',
+        'city': 'Lahore',
+      });
+
+      expect(rider.id, 'rider-7');
+      expect(rider.fullName, 'Bilal');
+      expect(rider.phone, '+923123210230');
+      expect(rider.secondaryPhone, isNull);
+      expect(rider.bikeModel, 'honda cd 70');
+      expect(rider.bikeNumber, 'LHE1212');
+      expect(rider.city, 'Lahore');
     });
   });
 
@@ -76,6 +143,20 @@ void main() {
       expect(onRoute.matchesStatus(OrderStatusFilter.onRoute), isTrue);
       expect(delivered.matchesStatus(OrderStatusFilter.delivered), isTrue);
       expect(delivered.matchesStatus(OrderStatusFilter.all), isTrue);
+    });
+
+    test('only placed and pending orders are cancellable', () {
+      final placed = StoreOrder.fromDocument('one', {'status': 'Placed'});
+      final pending = StoreOrder.fromDocument('two', {'status': 'Pending'});
+      final onRoute = StoreOrder.fromDocument('three', {'status': 'On route'});
+      final delivered = StoreOrder.fromDocument('four', {
+        'status': 'Delivered',
+      });
+
+      expect(placed.isPending, isTrue);
+      expect(pending.isPending, isTrue);
+      expect(onRoute.isPending, isFalse);
+      expect(delivered.isPending, isFalse);
     });
   });
 }

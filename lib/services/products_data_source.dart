@@ -9,10 +9,16 @@ class ProductVariant {
 
 class ProductPart {
   final String name;
+  final int quantity;
   final String? specs;
   final num? price;
 
-  const ProductPart({required this.name, this.specs, this.price});
+  const ProductPart({
+    required this.name,
+    required this.quantity,
+    this.specs,
+    this.price,
+  });
 }
 
 class StoreProduct {
@@ -77,6 +83,11 @@ class StoreProduct {
                   final values = Map<String, dynamic>.from(part);
                   return ProductPart(
                     name: _stringValue(values['partName']) ?? 'Unnamed part',
+                    quantity:
+                        _numberValue(
+                          values['quantity'] ?? values['qty'] ?? values['count'],
+                        )?.toInt() ??
+                        1,
                     specs: _stringValue(values['specs']),
                     price: _numberValue(values['price']),
                   );

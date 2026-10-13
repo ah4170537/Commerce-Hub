@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../constants/app_colors.dart';
@@ -127,8 +128,6 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           children: [
             _sectionTitle('Product information'),
-            if (!widget.isCreating)
-              _readOnlyField('Product ID', widget.product.id),
             _textField(_nameController, 'Name', required: true),
             _textField(_descriptionController, 'Description', maxLines: 3),
             _textField(
@@ -142,7 +141,9 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
             const SizedBox(height: 22),
             _sectionTitle('Product images'),
             const Text(
-              'Add multiple images to this product. Images upload when you save.',
+              'Add multiple images to this product. You can crop each image '
+              'when you add it, or tap a new image to crop it again. '
+              'Images upload when you save.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -204,19 +205,6 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
     );
   }
 
-  Widget _readOnlyField(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: InputDecorator(
-        decoration: _inputDecoration(label),
-        child: Text(
-          value,
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-      ),
-    );
-  }
-
   Widget _buildCategoryField() {
     final categoryNames = <String>{..._categories};
     if (widget.product.category.isNotEmpty) {
@@ -237,30 +225,21 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 'Could not load categories: $_categoriesError',
-                style: const TextStyle(
-                  color: AppColors.warning,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: AppColors.warning, fontSize: 12),
               ),
             ),
-          if (_loadingCategories)
-            const LinearProgressIndicator(minHeight: 2),
+          if (_loadingCategories) const LinearProgressIndicator(minHeight: 2),
           DropdownButtonFormField<String>(
             key: ValueKey(categories.join('\u0000')),
             initialValue: selectedCategory,
             isExpanded: true,
             decoration: _inputDecoration('Category'),
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
             dropdownColor: AppColors.cardSurface,
             items: categories
                 .map(
-                  (category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  ),
+                  (category) =>
+                      DropdownMenuItem(value: category, child: Text(category)),
                 )
                 .toList(),
             onChanged: _saving
@@ -383,7 +362,7 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
         ),
         ..._newImages.asMap().entries.map(
           (entry) => _imageTile(
-            key: ValueKey('new-${entry.value.file.name}-${entry.key}'),
+            key: ValueKey('new-${entry.value.file.path}-${entry.key}'),
             image: Image.memory(
               entry.value.bytes,
               width: 92,
@@ -392,6 +371,8 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
               cacheHeight: 276,
               fit: BoxFit.cover,
             ),
+            showCropBadge: true,
+            onTap: () => _recropNewImage(entry.key),
             onRemove: () => setState(() {
               _newImages.removeAt(entry.key);
             }),
@@ -405,14 +386,35 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
     required Key key,
     required Widget image,
     required VoidCallback onRemove,
+    VoidCallback? onTap,
+    bool showCropBadge = false,
   }) {
     return Stack(
       key: key,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: SizedBox(width: 92, height: 92, child: image),
+        GestureDetector(
+          onTap: onTap,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(width: 92, height: 92, child: image),
+          ),
         ),
+        if (showCropBadge)
+          Positioned(
+            left: 3,
+            bottom: 3,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.7),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.crop_rounded,
+                    size: 14, color: Colors.white),
+              ),
+            ),
+          ),
         Positioned(
           right: 3,
           top: 3,
@@ -537,6 +539,34 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
     );
   }
 
+  /// Opens the crop UI. Returns an [XFile] with the cropped result,
+  /// or null if the user cancelled.
+  Future<XFile?> _cropImage(String sourcePath) async {
+    const presets = [
+      CropAspectRatioPreset.original,
+      CropAspectRatioPreset.square,
+      CropAspectRatioPreset.ratio4x3,
+      CropAspectRatioPreset.ratio16x9,
+    ];
+
+    final cropped = await ImageCropper().cropImage(
+      sourcePath: sourcePath,
+      maxWidth: 1920,
+      maxHeight: 1920,
+      compressQuality: 85,
+      uiSettings: [
+        IOSUiSettings(
+          title: 'Crop image',
+          aspectRatioPresets: presets,
+        ),
+        WebUiSettings(context: context),
+      ],
+    );
+
+    if (cropped == null) return null;
+    return XFile(cropped.path);
+  }
+
   Future<void> _pickImages() async {
     try {
       final files = await _picker.pickMultiImage(
@@ -545,19 +575,41 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
         imageQuality: 85,
       );
       if (!mounted || files.isEmpty) return;
+
       final images = <_NewImage>[];
       for (final file in files) {
-        final bytes = await file.readAsBytes();
+        // Crop one by one. Cancelling the crop skips that image.
+        final cropped = await _cropImage(file.path);
+        if (!mounted) return;
+        if (cropped == null) continue;
+
+        final bytes = await cropped.readAsBytes();
         if (bytes.isEmpty) {
           throw FormatException('Selected image "${file.name}" is empty.');
         }
-        images.add(_NewImage(file: file, bytes: bytes));
+        images.add(_NewImage(file: cropped, bytes: bytes));
       }
       if (!mounted) return;
-      setState(() => _newImages.addAll(images));
+      if (images.isNotEmpty) setState(() => _newImages.addAll(images));
     } catch (error) {
       if (!mounted) return;
       _showMessage('Could not read selected images: $error');
+    }
+  }
+
+  Future<void> _recropNewImage(int index) async {
+    if (_saving) return;
+    try {
+      final cropped = await _cropImage(_newImages[index].file.path);
+      if (cropped == null || !mounted) return;
+      final bytes = await cropped.readAsBytes();
+      if (!mounted) return;
+      setState(
+        () => _newImages[index] = _NewImage(file: cropped, bytes: bytes),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('Could not crop image: $error');
     }
   }
 

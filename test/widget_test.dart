@@ -269,6 +269,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Flagship Smartphone Unit'), findsOneWidget);
+    expect(find.textContaining('prod-102'), findsNothing);
     expect(find.text('1 of 1 products'), findsOneWidget);
     expect(find.text('Add product'), findsOneWidget);
     expect(find.text('1 variant · 1 part'), findsOneWidget);
@@ -284,7 +285,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Edit product'), findsOneWidget);
-    expect(find.text('prod-102'), findsOneWidget);
+    expect(find.text('prod-102'), findsNothing);
   });
 
   testWidgets('creates a product from the products page', (

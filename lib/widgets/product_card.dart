@@ -132,7 +132,7 @@ class _ProductCardState extends State<ProductCard> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${product.id} · ${product.category}'
+                      '${product.category}'
                       '${product.subCategory.isEmpty ? '' : ' · ${product.subCategory}'}',
                       style: const TextStyle(
                         color: AppColors.textSecondary,

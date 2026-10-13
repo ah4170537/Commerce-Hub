@@ -10,12 +10,14 @@ import '../services/products_data_source.dart';
 
 class ProductEditorScreen extends StatefulWidget {
   final StoreProduct product;
+  final bool isCreating;
   final ProductEditorRepository? repository;
   final CategoriesRepository? categoriesRepository;
 
   const ProductEditorScreen({
     super.key,
     required this.product,
+    this.isCreating = false,
     this.repository,
     this.categoriesRepository,
   });
@@ -29,7 +31,6 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
   final _picker = ImagePicker();
   late final ProductEditorRepository _repository;
   late final CategoriesRepository _categoriesRepository;
-  late final Stream<List<String>> _categoriesStream;
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _priceController;
@@ -38,6 +39,9 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
   late final List<_PartFields> _parts;
   late final List<_ExistingImage> _existingImages;
   final List<_NewImage> _newImages = [];
+  List<String> _categories = [];
+  Object? _categoriesError;
+  bool _loadingCategories = true;
   String? _selectedCategory;
   bool _saving = false;
 
@@ -47,7 +51,7 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
     _repository = widget.repository ?? ImgBBProductEditorRepository();
     _categoriesRepository =
         widget.categoriesRepository ?? FirestoreCategoriesRepository();
-    _categoriesStream = _categoriesRepository.watchCategories();
+    _loadCategories();
     final product = widget.product;
     _nameController = TextEditingController(text: product.name);
     _descriptionController = TextEditingController(
@@ -56,7 +60,7 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
     _priceController = TextEditingController(
       text: product.price?.toString() ?? '',
     );
-    _selectedCategory = product.category;
+    _selectedCategory = widget.isCreating ? null : product.category;
     _subCategoryController = TextEditingController(text: product.subCategory);
     _variants = product.variants
         .map(
@@ -77,9 +81,7 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
         .toList();
     _existingImages = [
       for (var index = 0; index < product.imageUrls.length; index++)
-        _ExistingImage(
-          url: product.imageUrls[index],
-        ),
+        _ExistingImage(url: product.imageUrls[index]),
     ];
   }
 
@@ -104,7 +106,7 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
       backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
         backgroundColor: AppColors.backgroundPrimary,
-        title: const Text('Edit product'),
+        title: Text(widget.isCreating ? 'New product' : 'Edit product'),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
@@ -122,9 +124,11 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           children: [
             _sectionTitle('Product information'),
-            _readOnlyField('Product ID', widget.product.id),
+            if (!widget.isCreating)
+              _readOnlyField('Product ID', widget.product.id),
             _textField(_nameController, 'Name', required: true),
             _textField(_descriptionController, 'Description', maxLines: 3),
             _textField(
@@ -138,7 +142,7 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
             const SizedBox(height: 22),
             _sectionTitle('Product images'),
             const Text(
-              'Images are stored in Firebase Storage. Removing an image removes it from this product.',
+              'Add multiple images to this product. Images upload when you save.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -171,7 +175,9 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
             FilledButton.icon(
               onPressed: _saving ? null : _save,
               icon: const Icon(Icons.save_outlined),
-              label: const Text('Save product changes'),
+              label: Text(
+                widget.isCreating ? 'Create product' : 'Save product changes',
+              ),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primaryAccent,
                 foregroundColor: Colors.white,
@@ -212,69 +218,79 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
   }
 
   Widget _buildCategoryField() {
-    return StreamBuilder<List<String>>(
-      stream: _categoriesStream,
-      builder: (context, snapshot) {
-        final categoryNames = <String>{...?snapshot.data};
-        if ((snapshot.hasError || !snapshot.hasData) &&
-            widget.product.category.isNotEmpty) {
-          categoryNames.add(widget.product.category);
-        }
-        final categories = categoryNames.toList()..sort();
-        final selectedCategory = categories.contains(_selectedCategory)
-            ? _selectedCategory
-            : null;
+    final categoryNames = <String>{..._categories};
+    if (widget.product.category.isNotEmpty) {
+      categoryNames.add(widget.product.category);
+    }
+    final categories = categoryNames.toList()..sort();
+    final selectedCategory = categories.contains(_selectedCategory)
+        ? _selectedCategory
+        : null;
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (snapshot.hasError)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Could not load categories: ${snapshot.error}',
-                    style: const TextStyle(
-                      color: AppColors.warning,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              if (!snapshot.hasData && !snapshot.hasError)
-                const LinearProgressIndicator(minHeight: 2),
-              DropdownButtonFormField<String>(
-                key: ValueKey(categories.join('\u0000')),
-                initialValue: selectedCategory,
-                isExpanded: true,
-                decoration: _inputDecoration('Category'),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_categoriesError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Could not load categories: $_categoriesError',
                 style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
+                  color: AppColors.warning,
+                  fontSize: 12,
                 ),
-                dropdownColor: AppColors.cardSurface,
-                items: categories
-                    .map(
-                      (category) => DropdownMenuItem(
-                        value: category,
-                        child: Text(category),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _saving
-                    ? null
-                    : (category) => setState(() {
-                        _selectedCategory = category;
-                      }),
-                validator: (category) => category == null
-                    ? 'Select a category.'
-                    : null,
               ),
-            ],
+            ),
+          if (_loadingCategories)
+            const LinearProgressIndicator(minHeight: 2),
+          DropdownButtonFormField<String>(
+            key: ValueKey(categories.join('\u0000')),
+            initialValue: selectedCategory,
+            isExpanded: true,
+            decoration: _inputDecoration('Category'),
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+            ),
+            dropdownColor: AppColors.cardSurface,
+            items: categories
+                .map(
+                  (category) => DropdownMenuItem(
+                    value: category,
+                    child: Text(category),
+                  ),
+                )
+                .toList(),
+            onChanged: _saving
+                ? null
+                : (category) => setState(() {
+                    _selectedCategory = category;
+                  }),
+            validator: (category) =>
+                category == null ? 'Select a category.' : null,
           ),
-        );
-      },
+        ],
+      ),
     );
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await _categoriesRepository.getCategories();
+      if (!mounted) return;
+      setState(() {
+        _categories = categories;
+        _loadingCategories = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _categoriesError = error;
+        _loadingCategories = false;
+      });
+    }
   }
 
   Widget _textField(
@@ -350,10 +366,13 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
       children: [
         ..._existingImages.asMap().entries.map(
           (entry) => _imageTile(
+            key: ValueKey('existing-${entry.key}-${entry.value.url}'),
             image: Image.network(
               entry.value.url,
               width: 92,
               height: 92,
+              cacheWidth: 276,
+              cacheHeight: 276,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) => _imageFallback(),
             ),
@@ -364,10 +383,13 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
         ),
         ..._newImages.asMap().entries.map(
           (entry) => _imageTile(
+            key: ValueKey('new-${entry.value.file.name}-${entry.key}'),
             image: Image.memory(
               entry.value.bytes,
               width: 92,
               height: 92,
+              cacheWidth: 276,
+              cacheHeight: 276,
               fit: BoxFit.cover,
             ),
             onRemove: () => setState(() {
@@ -379,8 +401,13 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
     );
   }
 
-  Widget _imageTile({required Widget image, required VoidCallback onRemove}) {
+  Widget _imageTile({
+    required Key key,
+    required Widget image,
+    required VoidCallback onRemove,
+  }) {
     return Stack(
+      key: key,
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -512,7 +539,11 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
 
   Future<void> _pickImages() async {
     try {
-      final files = await _picker.pickMultiImage();
+      final files = await _picker.pickMultiImage(
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
       if (!mounted || files.isEmpty) return;
       final images = <_NewImage>[];
       for (final file in files) {
@@ -564,12 +595,19 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
             .toList(),
       };
 
-      await _repository.updateProduct(
-        productId: widget.product.id,
-        fields: fields,
-        retainedImageUrls: _existingImages.map((image) => image.url).toList(),
-        addedImages: _newImages.map((image) => image.file).toList(),
-      );
+      if (widget.isCreating) {
+        await _repository.createProduct(
+          fields: fields,
+          addedImages: _newImages.map((image) => image.file).toList(),
+        );
+      } else {
+        await _repository.updateProduct(
+          productId: widget.product.id,
+          fields: fields,
+          retainedImageUrls: _existingImages.map((image) => image.url).toList(),
+          addedImages: _newImages.map((image) => image.file).toList(),
+        );
+      }
 
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -578,7 +616,11 @@ class _ProductEditorScreenState extends State<ProductEditorScreen> {
       await _showErrorDialog(error.toString());
     } catch (error) {
       if (!mounted) return;
-      _showMessage('Could not save product changes: $error');
+      _showMessage(
+        widget.isCreating
+            ? 'Could not create product: $error'
+            : 'Could not save product changes: $error',
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }

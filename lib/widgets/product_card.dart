@@ -6,8 +6,14 @@ import '../services/products_data_source.dart';
 class ProductCard extends StatefulWidget {
   final StoreProduct product;
   final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
-  const ProductCard({super.key, required this.product, this.onEdit});
+  const ProductCard({
+    super.key,
+    required this.product,
+    this.onEdit,
+    this.onDelete,
+  });
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -48,6 +54,8 @@ class _ProductCardState extends State<ProductCard> {
                           imageUrl,
                           width: 72,
                           height: 72,
+                          cacheWidth: 216,
+                          cacheHeight: 216,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
                               _imagePlaceholder(),
@@ -87,25 +95,38 @@ class _ProductCardState extends State<ProductCard> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        TextButton.icon(
-                          onPressed: widget.onEdit,
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.primaryAccentLight,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: widget.onEdit,
+                              tooltip: 'Edit product',
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints.tightFor(
+                                width: 34,
+                                height: 34,
+                              ),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                size: 18,
+                                color: AppColors.primaryAccentLight,
+                              ),
                             ),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          icon: const Icon(Icons.edit_outlined, size: 16),
-                          label: const Text(
-                            'Edit',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                            IconButton(
+                              onPressed: widget.onDelete,
+                              tooltip: 'Delete product',
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints.tightFor(
+                                width: 34,
+                                height: 34,
+                              ),
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 18,
+                                color: AppColors.warning,
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ],
                     ),

@@ -5,12 +5,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 abstract interface class CategoriesRepository {
   Stream<List<String>> watchCategories();
 
+  Future<List<String>> getCategories();
+
   Future<void> addCategory(String name);
 
   Future<void> renameCategory({
     required String oldName,
     required String newName,
   });
+
+  Future<void> deleteCategory(String name);
 }
 
 class FirestoreCategoriesRepository implements CategoriesRepository {
@@ -78,6 +82,29 @@ class FirestoreCategoriesRepository implements CategoriesRepository {
       },
     );
     return controller.stream;
+  }
+
+  @override
+  Future<List<String>> getCategories() async {
+    final snapshots = await Future.wait([
+      _firestore.collection('categories').get(),
+      _firestore.collection('products').get(),
+    ]);
+    final uniqueNames = <String, String>{};
+    for (final name in [
+      ...snapshots[0].docs
+          .map((document) => document.data()['name'])
+          .whereType<String>(),
+      ...snapshots[1].docs
+          .map((document) => document.data()['category'])
+          .whereType<String>(),
+    ]) {
+      final normalizedName = name.trim();
+      if (normalizedName.isNotEmpty) {
+        uniqueNames.putIfAbsent(normalizedName, () => normalizedName);
+      }
+    }
+    return uniqueNames.values.toList()..sort();
   }
 
   @override
@@ -174,6 +201,35 @@ class FirestoreCategoriesRepository implements CategoriesRepository {
           'name': normalizedNewName,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+      }
+      await batch.commit();
+    }
+  }
+
+  @override
+  Future<void> deleteCategory(String name) async {
+    final categoryName = _validatedName(name);
+    final products = await _firestore
+        .collection('products')
+        .where('category', isEqualTo: categoryName)
+        .get();
+
+    for (var offset = 0; offset < products.docs.length; offset += 450) {
+      final batch = _firestore.batch();
+      for (final product in products.docs.skip(offset).take(450)) {
+        batch.delete(product.reference);
+      }
+      await batch.commit();
+    }
+
+    final savedCategories = await _firestore.collection('categories').get();
+    final matchingCategories = savedCategories.docs
+        .where((document) => _categoryName(document.data()) == categoryName)
+        .toList();
+    for (var offset = 0; offset < matchingCategories.length; offset += 450) {
+      final batch = _firestore.batch();
+      for (final category in matchingCategories.skip(offset).take(450)) {
+        batch.delete(category.reference);
       }
       await batch.commit();
     }

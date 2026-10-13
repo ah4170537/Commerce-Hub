@@ -15,6 +15,7 @@ class CategoriesScreen extends StatefulWidget {
 class _CategoriesScreenState extends State<CategoriesScreen> {
   late final CategoriesRepository _repository;
   late final Stream<List<String>> _categoriesStream;
+  final Set<String> _deletingCategories = {};
   String? _operationError;
 
   @override
@@ -101,8 +102,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 itemCount: categories.length,
                 separatorBuilder: (context, index) =>
                     const SizedBox(height: 10),
-                itemBuilder: (context, index) =>
-                    _categoryCard(categories[index]),
+                itemBuilder: (context, index) {
+                  final category = categories[index];
+                  return _categoryCard(
+                    category,
+                    deleting: _deletingCategories.contains(category),
+                  );
+                },
               );
             },
           ),
@@ -111,7 +117,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     );
   }
 
-  Widget _categoryCard(String category) {
+  Widget _categoryCard(String category, {required bool deleting}) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
@@ -138,20 +144,90 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        subtitle: const Text(
-          'Products in this category update when it is renamed',
+        subtitle: Text(
+          deleting
+              ? 'Deleting category and its products...'
+              : 'Renaming updates the category on its products',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
         ),
-        trailing: IconButton(
-          tooltip: 'Edit $category',
-          onPressed: () => _showCategoryDialog(category: category),
-          icon: const Icon(
-            Icons.edit_outlined,
-            color: AppColors.primaryAccentLight,
-          ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Edit $category',
+              onPressed: deleting
+                  ? null
+                  : () => _showCategoryDialog(category: category),
+              icon: const Icon(
+                Icons.edit_outlined,
+                color: AppColors.primaryAccentLight,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Delete $category',
+              onPressed: deleting ? null : () => _confirmDeleteCategory(category),
+              icon: deleting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.warning,
+                    ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteCategory(String category) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardSurface,
+        title: const Text('Delete category?'),
+        content: Text(
+          'Deleting "$category" will permanently delete the category and every product assigned to it. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.warning,
+              foregroundColor: AppColors.backgroundPrimary,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete category and products'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete != true || !mounted) return;
+
+    setState(() {
+      _operationError = null;
+      _deletingCategories.add(category);
+    });
+    try {
+      await _repository.deleteCategory(category);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"$category" and its products were deleted.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _operationError = 'Could not delete "$category": $error');
+    } finally {
+      if (mounted) setState(() => _deletingCategories.remove(category));
+    }
   }
 
   Widget _message(String message, IconData icon) {

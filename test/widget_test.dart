@@ -45,10 +45,14 @@ class _FakeCategoriesRepository implements CategoriesRepository {
   String? addedName;
   String? renamedFrom;
   String? renamedTo;
+  String? deletedCategory;
 
   @override
   Stream<List<String>> watchCategories() =>
       Stream.value(['components', 'featured']);
+
+  @override
+  Future<List<String>> getCategories() async => ['components', 'featured'];
 
   @override
   Future<void> addCategory(String name) async {
@@ -62,6 +66,11 @@ class _FakeCategoriesRepository implements CategoriesRepository {
   }) async {
     renamedFrom = oldName;
     renamedTo = newName;
+  }
+
+  @override
+  Future<void> deleteCategory(String name) async {
+    deletedCategory = name;
   }
 }
 
@@ -91,7 +100,17 @@ class _FakeProductsDataSource implements ProductsDataSource {
 
 class _FakeProductEditorRepository implements ProductEditorRepository {
   Map<String, dynamic>? savedFields;
+  Map<String, dynamic>? createdFields;
   String? savedProductId;
+  String? deletedProductId;
+
+  @override
+  Future<void> createProduct({
+    required Map<String, dynamic> fields,
+    required List<XFile> addedImages,
+  }) async {
+    createdFields = fields;
+  }
 
   @override
   Future<void> updateProduct({
@@ -102,6 +121,11 @@ class _FakeProductEditorRepository implements ProductEditorRepository {
   }) async {
     savedProductId = productId;
     savedFields = fields;
+  }
+
+  @override
+  Future<void> deleteProduct(String productId) async {
+    deletedProductId = productId;
   }
 }
 
@@ -246,6 +270,7 @@ void main() {
 
     expect(find.text('Flagship Smartphone Unit'), findsOneWidget);
     expect(find.text('1 of 1 products'), findsOneWidget);
+    expect(find.text('Add product'), findsOneWidget);
     expect(find.text('1 variant · 1 part'), findsOneWidget);
 
     await tester.tap(find.text('1 variant · 1 part'));
@@ -255,11 +280,46 @@ void main() {
     expect(find.text('Battery Module'), findsOneWidget);
     expect(find.text('5000mAh Li-Po'), findsOneWidget);
 
-    await tester.tap(find.text('Edit').first);
+    await tester.tap(find.byTooltip('Edit product'));
     await tester.pumpAndSettle();
 
     expect(find.text('Edit product'), findsOneWidget);
     expect(find.text('prod-102'), findsOneWidget);
+  });
+
+  testWidgets('creates a product from the products page', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeProductEditorRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductsScreen(
+            dataSource: _FakeProductsDataSource(),
+            editorRepository: repository,
+            categoriesRepository: _FakeCategoriesRepository(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add product'));
+    await tester.pumpAndSettle();
+    expect(find.text('New product'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'New headphones');
+    await tester.enterText(find.byType(TextFormField).at(2), '4500');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('components').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save').first);
+    await tester.pumpAndSettle();
+
+    expect(repository.createdFields?['name'], 'New headphones');
+    expect(repository.createdFields?['price'], 4500);
+    expect(repository.createdFields?['category'], 'components');
   });
 
   testWidgets('adds and renames categories from the category page', (
@@ -287,6 +347,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.renamedFrom, 'featured');
     expect(repository.renamedTo, 'Featured Picks');
+
+    await tester.tap(find.byTooltip('Delete featured'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Deleting "featured" will permanently delete the category and every product assigned to it. This cannot be undone.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Delete category and products'));
+    await tester.pumpAndSettle();
+    expect(repository.deletedCategory, 'featured');
+  });
+
+  testWidgets('deletes an individual product after confirmation', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeProductEditorRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductsScreen(
+            dataSource: _FakeProductsDataSource(),
+            editorRepository: repository,
+            categoriesRepository: _FakeCategoriesRepository(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Delete product'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete product?'), findsOneWidget);
+    await tester.tap(find.text('Delete product'));
+    await tester.pumpAndSettle();
+    expect(repository.deletedProductId, 'prod-102');
   });
 
   testWidgets('edits a product and saves the changed Firestore fields', (
@@ -334,5 +431,48 @@ void main() {
     expect(repository.savedFields?['variants'], [
       {'name': 'Matte Black', 'price': 3000},
     ]);
+  });
+
+  testWidgets('keeps product image previews constrained while scrolling', (
+    WidgetTester tester,
+  ) async {
+    final product = StoreProduct.fromDocument('prod-images', {
+      'name': 'Image-heavy product',
+      'category': 'components',
+      'imageUrls': ['https://example.com/product-image.jpg'],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductEditorScreen(
+            product: product,
+            repository: _FakeProductEditorRepository(),
+            categoriesRepository: _FakeCategoriesRepository(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final imageTile = find.byKey(
+      const ValueKey('existing-0-https://example.com/product-image.jpg'),
+    );
+    await tester.scrollUntilVisible(
+      imageTile,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(tester.getSize(imageTile), const Size(92, 92));
+    expect(find.text('Product images'), findsOneWidget);
+
+    final pageScroll = find.byType(Scrollable).first;
+    await tester.drag(pageScroll, const Offset(0, -700));
+    await tester.pumpAndSettle();
+    await tester.drag(pageScroll, const Offset(0, 700));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(imageTile, 200, scrollable: pageScroll);
+    expect(tester.getSize(imageTile), const Size(92, 92));
   });
 }

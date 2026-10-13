@@ -1,20 +1,30 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 const _imgBbApiKey = String.fromEnvironment('IMGBB_API_KEY');
+const _uploadTimeout = Duration(seconds: 60);
 
 abstract interface class ProductEditorRepository {
+  Future<void> createProduct({
+    required Map<String, dynamic> fields,
+    required List<XFile> addedImages,
+  });
+
   Future<void> updateProduct({
     required String productId,
     required Map<String, dynamic> fields,
     required List<String> retainedImageUrls,
     required List<XFile> addedImages,
   });
+
+  Future<void> deleteProduct(String productId);
 }
 
 class ProductImageUploadException implements Exception {
@@ -25,6 +35,9 @@ class ProductImageUploadException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Top-level so it can run in a background isolate via [compute].
+String _encodeImage(Uint8List bytes) => base64Encode(bytes);
 
 class ImgBBImageUploader {
   final http.Client _httpClient;
@@ -49,10 +62,11 @@ class ImgBBImageUploader {
 
     final uri = Uri.https('api.imgbb.com', '/1/upload', {'key': apiKey});
     try {
-      final response = await _httpClient.post(
-        uri,
-        body: {'image': base64Encode(bytes), 'name': fileName},
-      );
+      // Encode in a background isolate so large images don't freeze the UI.
+      final encoded = await compute(_encodeImage, bytes);
+      final response = await _httpClient
+          .post(uri, body: {'image': encoded, 'name': fileName})
+          .timeout(_uploadTimeout);
       final decoded = jsonDecode(response.body);
       if (decoded is Map<String, dynamic> &&
           response.statusCode >= 200 &&
@@ -76,6 +90,11 @@ class ImgBBImageUploader {
       );
     } on ProductImageUploadException {
       rethrow;
+    } on TimeoutException {
+      throw ProductImageUploadException(
+        'Uploading "${fileName.isEmpty ? 'image' : fileName}" to ImgBB '
+        'timed out after ${_uploadTimeout.inSeconds} seconds.',
+      );
     } on FormatException catch (error) {
       throw ProductImageUploadException(
         'ImgBB returned an invalid response for the image upload: $error',
@@ -108,17 +127,29 @@ class ImgBBProductEditorRepository implements ProductEditorRepository {
        _imageUploader = imageUploader ?? ImgBBImageUploader();
 
   @override
+  Future<void> createProduct({
+    required Map<String, dynamic> fields,
+    required List<XFile> addedImages,
+  }) async {
+    final uploadedUrls = await _uploadImages(addedImages);
+    final productReference = _firestore.collection('products').doc();
+    await productReference.set({
+      ...fields,
+      'id': productReference.id,
+      'imageUrls': uploadedUrls,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
   Future<void> updateProduct({
     required String productId,
     required Map<String, dynamic> fields,
     required List<String> retainedImageUrls,
     required List<XFile> addedImages,
   }) async {
-    final uploadedUrls = <String>[];
-    for (final image in addedImages) {
-      final Uint8List bytes = await image.readAsBytes();
-      uploadedUrls.add(await _imageUploader.upload(image.name, bytes));
-    }
+    final uploadedUrls = await _uploadImages(addedImages);
 
     final productReference = _firestore.collection('products').doc(productId);
     await productReference.update({
@@ -128,5 +159,19 @@ class ImgBBProductEditorRepository implements ProductEditorRepository {
       'imageStoragePaths': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  @override
+  Future<void> deleteProduct(String productId) async {
+    await _firestore.collection('products').doc(productId).delete();
+  }
+
+  Future<List<String>> _uploadImages(List<XFile> images) async {
+    final uploadedUrls = <String>[];
+    for (final image in images) {
+      final Uint8List bytes = await image.readAsBytes();
+      uploadedUrls.add(await _imageUploader.upload(image.name, bytes));
+    }
+    return uploadedUrls;
   }
 }

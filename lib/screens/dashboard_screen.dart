@@ -34,6 +34,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentTab = 0;
+  final Set<int> _visitedTabs = {0};
   int? _customerCount;
   int? _totalOrdersCount;
   int? _pendingOrdersCount;
@@ -104,37 +105,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildDashboardView(),
 
             // Tab 1: Products / Inventory
-            ProductsScreen(
-              dataSource: widget.productsDataSource,
-              categoriesRepository: _categoriesRepository,
-            ),
+            if (_visitedTabs.contains(1))
+              ProductsScreen(
+                dataSource: widget.productsDataSource,
+                categoriesRepository: _categoriesRepository,
+              )
+            else
+              const SizedBox.shrink(),
 
             // Tab 2: Product categories
-            CategoriesScreen(repository: _categoriesRepository),
+            if (_visitedTabs.contains(2))
+              CategoriesScreen(repository: _categoriesRepository)
+            else
+              const SizedBox.shrink(),
 
             // Tab 3: Riders (Placeholder for next screen)
-            _buildPlaceholderView(
+            if (_visitedTabs.contains(3))
+              _buildPlaceholderView(
               title: 'Riders Control',
               subtitle: 'Manage rider fleet, active routes & documents',
               icon: Icons.two_wheeler_rounded,
-            ),
+              )
+            else
+              const SizedBox.shrink(),
 
             // Tab 4: Customers (Placeholder for next screen)
-            _buildPlaceholderView(
+            if (_visitedTabs.contains(4))
+              _buildPlaceholderView(
               title: 'Customer Management',
               subtitle: 'Manage registered users, order histories & disputes',
               icon: Icons.people_outline_rounded,
-            ),
+              )
+            else
+              const SizedBox.shrink(),
           ],
         ),
       ),
       bottomNavigationBar: CustomBottomNav(
         currentIndex: _currentTab,
-        onTabSelected: (index) {
-          setState(() {
-            _currentTab = index;
-          });
-        },
+        onTabSelected: _selectTab,
       ),
     );
   }
@@ -200,9 +209,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         subtitle: 'Customer accounts',
                         subtitleColor: AppColors.primaryAccentLight,
                         onTap: () {
-                          setState(() {
-                            _currentTab = 4; // Switch to Customers tab
-                          });
+                          _selectTab(4);
                         },
                       ),
                     ),
@@ -225,9 +232,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // Quick Actions
                 QuickActions(
                   onAddProduct: () {
-                    setState(() {
-                      _currentTab = 1; // Switch to Products tab
-                    });
+                    _selectTab(1);
                   },
                   onDispatch: () {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -272,6 +277,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   String _formatCount(int? count) => count?.toString() ?? '—';
+
+  void _selectTab(int index) {
+    setState(() {
+      _currentTab = index;
+      _visitedTabs.add(index);
+    });
+  }
 
   Widget _buildDashboardDataStatus() {
     final errors = [

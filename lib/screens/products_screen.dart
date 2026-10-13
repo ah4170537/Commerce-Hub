@@ -5,6 +5,7 @@ import '../services/categories_repository.dart';
 import '../services/product_editor_repository.dart';
 import '../services/products_data_source.dart';
 import '../widgets/product_card.dart';
+import 'new_product_screen.dart';
 import 'product_editor_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
@@ -27,8 +28,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
   final TextEditingController _searchController = TextEditingController();
   late final ProductsDataSource _dataSource;
   late final Stream<List<StoreProduct>> _productsStream;
+  final Set<String> _deletingProductIds = {};
   String? _selectedCategory;
   String _searchQuery = '';
+
+  ProductEditorRepository get _editorRepository =>
+      widget.editorRepository ?? ImgBBProductEditorRepository();
 
   @override
   void initState() {
@@ -162,54 +167,79 @@ class _ProductsScreenState extends State<ProductsScreen> {
     required List<String> categories,
     required String? selectedCategory,
   }) {
-    return ListView(
+    final headerCount = 6;
+    final itemCount = headerCount + (products.isEmpty ? 1 : products.length);
+
+    return ListView.builder(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      children: [
-        _buildSearchBar(),
-        const SizedBox(height: 14),
-        _buildCategoryFilters(categories, selectedCategory),
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Product catalog',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        switch (index) {
+          case 0:
+            return _buildSearchBar();
+          case 1:
+            return const SizedBox(height: 14);
+          case 2:
+            return _buildCategoryFilters(categories, selectedCategory);
+          case 3:
+            return const SizedBox(height: 18);
+          case 4:
+            return Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Product catalog',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            Text(
-              '${products.length} of $totalCount products',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        if (products.isEmpty)
-          _buildMessage(
-            totalCount == 0
-                ? 'No products found in the products collection.'
-                : 'No products match this search or category.',
-            icon: Icons.inventory_2_outlined,
-          )
-        else
-          ...products.map(
-            (product) => Padding(
+                FilledButton.icon(
+                  onPressed: _createProduct,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Add product'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${products.length} of $totalCount products',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            );
+          case 5:
+            return const SizedBox(height: 14);
+          default:
+            if (products.isEmpty) {
+              return _buildMessage(
+                totalCount == 0
+                    ? 'No products found in the products collection.'
+                    : 'No products match this search or category.',
+                icon: Icons.inventory_2_outlined,
+              );
+            }
+            final product = products[index - headerCount];
+            return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: ProductCard(
                 product: product,
                 onEdit: () => _editProduct(product),
+                onDelete: _deletingProductIds.contains(product.id)
+                    ? null
+                    : () => _deleteProduct(product),
               ),
-            ),
-          ),
-      ],
+            );
+        }
+      },
     );
   }
 
@@ -219,11 +249,70 @@ class _ProductsScreenState extends State<ProductsScreen> {
       MaterialPageRoute(
         builder: (context) => ProductEditorScreen(
           product: product,
-          repository: widget.editorRepository,
+          repository: _editorRepository,
           categoriesRepository: widget.categoriesRepository,
         ),
       ),
     );
+  }
+
+  Future<void> _createProduct() async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NewProductScreen(
+          repository: _editorRepository,
+          categoriesRepository: widget.categoriesRepository,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteProduct(StoreProduct product) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.cardSurface,
+        title: const Text('Delete product?'),
+        content: Text(
+          'Permanently delete "${product.name}" from your catalog?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.warning,
+              foregroundColor: AppColors.backgroundPrimary,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete product'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete != true || !mounted) return;
+
+    setState(() => _deletingProductIds.add(product.id));
+    try {
+      await _editorRepository.deleteProduct(product.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('"${product.name}" was deleted.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not delete "${product.name}": $error'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _deletingProductIds.remove(product.id));
+    }
   }
 
   Widget _buildSearchBar() {

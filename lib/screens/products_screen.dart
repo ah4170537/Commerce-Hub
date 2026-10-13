@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
+import '../services/categories_repository.dart';
+import '../services/product_editor_repository.dart';
 import '../services/products_data_source.dart';
 import '../widgets/product_card.dart';
+import 'product_editor_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
   final ProductsDataSource? dataSource;
+  final ProductEditorRepository? editorRepository;
+  final CategoriesRepository? categoriesRepository;
 
-  const ProductsScreen({super.key, this.dataSource});
+  const ProductsScreen({
+    super.key,
+    this.dataSource,
+    this.editorRepository,
+    this.categoriesRepository,
+  });
 
   @override
   State<ProductsScreen> createState() => _ProductsScreenState();
@@ -193,10 +203,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ...products.map(
             (product) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: ProductCard(product: product),
+              child: ProductCard(
+                product: product,
+                onEdit: () => _editProduct(product),
+              ),
             ),
           ),
       ],
+    );
+  }
+
+  Future<void> _editProduct(StoreProduct product) async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductEditorScreen(
+          product: product,
+          repository: widget.editorRepository,
+          categoriesRepository: widget.categoriesRepository,
+        ),
+      ),
     );
   }
 

@@ -5,13 +5,24 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
+import 'package:commerce_hub/screens/categories_screen.dart';
 import 'package:commerce_hub/screens/dashboard_screen.dart';
+import 'package:commerce_hub/screens/product_editor_screen.dart';
 import 'package:commerce_hub/screens/products_screen.dart';
+import 'package:commerce_hub/services/categories_repository.dart';
 import 'package:commerce_hub/services/dashboard_data_source.dart';
+import 'package:commerce_hub/services/product_editor_repository.dart';
 import 'package:commerce_hub/services/products_data_source.dart';
+import 'package:image_picker/image_picker.dart';
 
 class _FakeDashboardDataSource implements DashboardDataSource {
   @override
@@ -27,6 +38,30 @@ class _FakeDashboardDataSource implements DashboardDataSource {
         delivered: 3,
       ),
     );
+  }
+}
+
+class _FakeCategoriesRepository implements CategoriesRepository {
+  String? addedName;
+  String? renamedFrom;
+  String? renamedTo;
+
+  @override
+  Stream<List<String>> watchCategories() =>
+      Stream.value(['components', 'featured']);
+
+  @override
+  Future<void> addCategory(String name) async {
+    addedName = name;
+  }
+
+  @override
+  Future<void> renameCategory({
+    required String oldName,
+    required String newName,
+  }) async {
+    renamedFrom = oldName;
+    renamedTo = newName;
   }
 }
 
@@ -54,7 +89,80 @@ class _FakeProductsDataSource implements ProductsDataSource {
   }
 }
 
+class _FakeProductEditorRepository implements ProductEditorRepository {
+  Map<String, dynamic>? savedFields;
+  String? savedProductId;
+
+  @override
+  Future<void> updateProduct({
+    required String productId,
+    required Map<String, dynamic> fields,
+    required List<String> retainedImageUrls,
+    required List<XFile> addedImages,
+  }) async {
+    savedProductId = productId;
+    savedFields = fields;
+  }
+}
+
 void main() {
+  test('uploads image bytes to ImgBB and returns the hosted URL', () async {
+    final uploader = ImgBBImageUploader(
+      apiKey: 'test-key',
+      httpClient: MockClient((request) async {
+        expect(request.url.host, 'api.imgbb.com');
+        expect(request.url.queryParameters['key'], 'test-key');
+        expect(request.bodyFields['image'], base64Encode([1, 2, 3]));
+        expect(request.bodyFields['name'], 'product.jpg');
+        return http.Response(
+          jsonEncode({
+            'success': true,
+            'data': {'url': 'https://i.ibb.co/product.jpg'},
+          }),
+          200,
+        );
+      }),
+    );
+
+    final url = await uploader.upload(
+      'product.jpg',
+      Uint8List.fromList([1, 2, 3]),
+    );
+    expect(url, 'https://i.ibb.co/product.jpg');
+  });
+
+  test('reads the ImgBB API key from dotenv', () async {
+    await dotenv.load(
+      isOptional: true,
+      mergeWith: {'IMGBB_API_KEY': 'loaded-from-env'},
+    );
+
+    expect(ImgBBImageUploader().apiKey, 'loaded-from-env');
+  });
+
+  test(
+    'requires an ImgBB API key only when image uploading is requested',
+    () async {
+      final uploader = ImgBBImageUploader(
+        apiKey: '',
+        httpClient: MockClient((request) async {
+          fail('Should not make an HTTP request without an API key.');
+        }),
+      );
+
+      await expectLater(
+        uploader.upload('product.jpg', Uint8List.fromList([1])),
+        throwsA(
+          isA<ProductImageUploadException>().having(
+            (error) => error.toString(),
+            'message',
+            contains('IMGBB_API_KEY'),
+          ),
+        ),
+      );
+    },
+  );
+
   test('parses standard products and optional component fields', () {
     final product = StoreProduct.fromDocument('fallback-id', {
       'id': 'prod-102',
@@ -97,6 +205,7 @@ void main() {
         home: DashboardScreen(
           dataSource: _FakeDashboardDataSource(),
           productsDataSource: _FakeProductsDataSource(),
+          categoriesRepository: _FakeCategoriesRepository(),
         ),
       ),
     );
@@ -108,15 +217,28 @@ void main() {
     expect(find.text('7'), findsOneWidget);
     expect(find.text('4'), findsOneWidget);
     expect(find.text('Delivered'), findsOneWidget);
+
+    await tester.tap(find.text('Categories'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Organize the categories used by your products'),
+      findsOneWidget,
+    );
+    expect(find.text('components'), findsOneWidget);
   });
 
   testWidgets('shows Firestore products and their optional details', (
     WidgetTester tester,
   ) async {
+    final repository = _FakeProductEditorRepository();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProductsScreen(dataSource: _FakeProductsDataSource()),
+          body: ProductsScreen(
+            dataSource: _FakeProductsDataSource(),
+            editorRepository: repository,
+            categoriesRepository: _FakeCategoriesRepository(),
+          ),
         ),
       ),
     );
@@ -132,5 +254,85 @@ void main() {
     expect(find.text('Standard Unit'), findsOneWidget);
     expect(find.text('Battery Module'), findsOneWidget);
     expect(find.text('5000mAh Li-Po'), findsOneWidget);
+
+    await tester.tap(find.text('Edit').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit product'), findsOneWidget);
+    expect(find.text('prod-102'), findsOneWidget);
+  });
+
+  testWidgets('adds and renames categories from the category page', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeCategoriesRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: CategoriesScreen(repository: repository)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Add category'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'Best Selling');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(repository.addedName, 'Best Selling');
+
+    await tester.tap(find.byTooltip('Edit featured'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'Featured Picks');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(repository.renamedFrom, 'featured');
+    expect(repository.renamedTo, 'Featured Picks');
+  });
+
+  testWidgets('edits a product and saves the changed Firestore fields', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeProductEditorRepository();
+    final product = StoreProduct.fromDocument('prod-001', {
+      'id': 'prod-001',
+      'name': 'Wireless Headphones',
+      'description': 'Noise canceling headphones',
+      'category': 'featured',
+      'subCategory': 'headphones',
+      'price': 3000,
+      'variants': [
+        {'name': 'Matte Black', 'price': 3000},
+      ],
+      'imageUrls': ['https://example.com/image.jpg'],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductEditorScreen(
+            product: product,
+            repository: repository,
+            categoriesRepository: _FakeCategoriesRepository(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('components').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'Updated headset');
+    await tester.tap(find.text('Save').first);
+    await tester.pumpAndSettle();
+
+    expect(repository.savedProductId, 'prod-001');
+    expect(repository.savedFields?['name'], 'Updated headset');
+    expect(repository.savedFields?['category'], 'components');
+    expect(repository.savedFields?['variants'], [
+      {'name': 'Matte Black', 'price': 3000},
+    ]);
   });
 }

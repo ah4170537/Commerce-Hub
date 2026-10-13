@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
+import '../services/categories_repository.dart';
 import '../services/dashboard_data_source.dart';
 import '../services/products_data_source.dart';
 import '../widgets/alert_banner.dart';
@@ -13,12 +14,19 @@ import '../widgets/active_orders_card.dart';
 import '../widgets/custom_bottom_nav.dart';
 import 'products_screen.dart';
 import 'broadcast_screen.dart';
+import 'categories_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final DashboardDataSource? dataSource;
   final ProductsDataSource? productsDataSource;
+  final CategoriesRepository? categoriesRepository;
 
-  const DashboardScreen({super.key, this.dataSource, this.productsDataSource});
+  const DashboardScreen({
+    super.key,
+    this.dataSource,
+    this.productsDataSource,
+    this.categoriesRepository,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -31,6 +39,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int? _pendingOrdersCount;
   int? _onRouteOrdersCount;
   int? _deliveredOrdersCount;
+  late final CategoriesRepository _categoriesRepository;
   Object? _usersError;
   Object? _ordersError;
   StreamSubscription<int>? _usersSubscription;
@@ -39,6 +48,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _categoriesRepository =
+        widget.categoriesRepository ?? FirestoreCategoriesRepository();
     final dataSource = widget.dataSource ?? FirestoreDashboardDataSource();
 
     _usersSubscription = dataSource.watchCustomerCount().listen(
@@ -93,16 +104,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildDashboardView(),
 
             // Tab 1: Products / Inventory
-            ProductsScreen(dataSource: widget.productsDataSource),
+            ProductsScreen(
+              dataSource: widget.productsDataSource,
+              categoriesRepository: _categoriesRepository,
+            ),
 
-            // Tab 2: Riders (Placeholder for next screen)
+            // Tab 2: Product categories
+            CategoriesScreen(repository: _categoriesRepository),
+
+            // Tab 3: Riders (Placeholder for next screen)
             _buildPlaceholderView(
               title: 'Riders Control',
               subtitle: 'Manage rider fleet, active routes & documents',
               icon: Icons.two_wheeler_rounded,
             ),
 
-            // Tab 3: Customers (Placeholder for next screen)
+            // Tab 4: Customers (Placeholder for next screen)
             _buildPlaceholderView(
               title: 'Customer Management',
               subtitle: 'Manage registered users, order histories & disputes',
@@ -184,7 +201,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         subtitleColor: AppColors.primaryAccentLight,
                         onTap: () {
                           setState(() {
-                            _currentTab = 3; // Switch to Customers tab
+                            _currentTab = 4; // Switch to Customers tab
                           });
                         },
                       ),

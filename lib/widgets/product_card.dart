@@ -5,8 +5,9 @@ import '../services/products_data_source.dart';
 
 class ProductCard extends StatefulWidget {
   final StoreProduct product;
+  final VoidCallback? onEdit;
 
-  const ProductCard({super.key, required this.product});
+  const ProductCard({super.key, required this.product, this.onEdit});
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -27,9 +28,7 @@ class _ProductCardState extends State<ProductCard> {
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.cardBorder.withValues(alpha: 0.5),
-        ),
+        border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,15 +72,42 @@ class _ProductCardState extends State<ProductCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      product.name,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            product.name,
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: widget.onEdit,
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.primaryAccentLight,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text(
+                            'Edit',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -249,6 +275,8 @@ class _ProductCardState extends State<ProductCard> {
       }
       grouped.write(whole[index]);
     }
-    return parts.length == 1 ? grouped.toString() : '${grouped.toString()}.${parts.last}';
+    return parts.length == 1
+        ? grouped.toString()
+        : '${grouped.toString()}.${parts.last}';
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../constants/app_colors.dart';
 
 class CustomBottomNav extends StatelessWidget {
@@ -16,6 +17,7 @@ class CustomBottomNav extends StatelessWidget {
     final navItems = [
       {'icon': Icons.grid_view_rounded, 'label': 'Dashboard'},
       {'icon': Icons.inventory_2_outlined, 'label': 'Products'},
+      {'icon': Icons.category_outlined, 'label': 'Categories'},
       {'icon': Icons.two_wheeler_rounded, 'label': 'Riders'},
       {'icon': Icons.people_outline_rounded, 'label': 'Customers'},
     ];
@@ -55,45 +57,45 @@ class CustomBottomNav extends StatelessWidget {
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 4,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.navSelectedBackground
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                item['icon'] as IconData,
+                                size: 22,
+                                color: isSelected
+                                    ? AppColors.navSelected
+                                    : AppColors.navUnselected,
+                              ),
                             ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.navSelectedBackground
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(16),
+                            const SizedBox(height: 4),
+                            Text(
+                              item['label'] as String,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? AppColors.navSelected
+                                    : AppColors.navUnselected,
+                                fontSize: 11,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                              ),
                             ),
-                            child: Icon(
-                              item['icon'] as IconData,
-                              size: 22,
-                              color: isSelected
-                                  ? AppColors.navSelected
-                                  : AppColors.navUnselected,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item['label'] as String,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? AppColors.navSelected
-                                  : AppColors.navUnselected,
-                              fontSize: 11,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
               ),
             ),
             // iOS / Android bottom gesture bar pill
@@ -112,4 +114,3 @@ class CustomBottomNav extends StatelessWidget {
     );
   }
 }
-

@@ -18,6 +18,7 @@ class ProductPart {
 class StoreProduct {
   final String id;
   final String name;
+  final String? description;
   final String category;
   final String subCategory;
   final num? price;
@@ -28,6 +29,7 @@ class StoreProduct {
   const StoreProduct({
     required this.id,
     required this.name,
+    required this.description,
     required this.category,
     required this.subCategory,
     required this.price,
@@ -47,6 +49,7 @@ class StoreProduct {
     return StoreProduct(
       id: _stringValue(data['id']) ?? documentId,
       name: _stringValue(data['name']) ?? 'Unnamed product',
+      description: _stringValue(data['description']),
       category: _stringValue(data['category']) ?? 'Uncategorized',
       subCategory: _stringValue(data['subCategory']) ?? '',
       price: _numberValue(data['price']),

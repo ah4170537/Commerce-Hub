@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+
 import '../constants/app_colors.dart';
 
 class ActiveOrdersCard extends StatelessWidget {
   final VoidCallback? onViewAll;
+  final int? pendingCount;
+  final int? onRouteCount;
+  final int? deliveredCount;
 
   const ActiveOrdersCard({
     super.key,
     this.onViewAll,
+    required this.pendingCount,
+    required this.onRouteCount,
+    required this.deliveredCount,
   });
 
   @override
@@ -30,7 +37,7 @@ class ActiveOrdersCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Active orders',
+                'Order status',
                 style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 16,
@@ -61,19 +68,19 @@ class ActiveOrdersCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _buildStatusColumn(
-                  value: '12',
-                  label: 'Preparing',
+                  value: _formatCount(pendingCount),
+                  label: 'Pending',
                 ),
               ),
               Expanded(
                 child: _buildStatusColumn(
-                  value: '8',
+                  value: _formatCount(onRouteCount),
                   label: 'On route',
                 ),
               ),
               Expanded(
                 child: _buildStatusColumn(
-                  value: '36',
+                  value: _formatCount(deliveredCount),
                   label: 'Delivered',
                 ),
               ),
@@ -84,10 +91,9 @@ class ActiveOrdersCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusColumn({
-    required String value,
-    required String label,
-  }) {
+  String _formatCount(int? count) => count?.toString() ?? '—';
+
+  Widget _buildStatusColumn({required String value, required String label}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -113,4 +119,3 @@ class ActiveOrdersCard extends StatelessWidget {
     );
   }
 }
-

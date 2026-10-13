@@ -1,5 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../constants/app_colors.dart';
+import '../services/dashboard_data_source.dart';
+import '../services/products_data_source.dart';
 import '../widgets/alert_banner.dart';
 import '../widgets/kpi_card.dart';
 import '../widgets/order_fulfillment_card.dart';
@@ -10,7 +15,10 @@ import 'products_screen.dart';
 import 'broadcast_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final DashboardDataSource? dataSource;
+  final ProductsDataSource? productsDataSource;
+
+  const DashboardScreen({super.key, this.dataSource, this.productsDataSource});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -18,6 +26,59 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentTab = 0;
+  int? _customerCount;
+  int? _totalOrdersCount;
+  int? _pendingOrdersCount;
+  int? _onRouteOrdersCount;
+  int? _deliveredOrdersCount;
+  Object? _usersError;
+  Object? _ordersError;
+  StreamSubscription<int>? _usersSubscription;
+  StreamSubscription<DashboardOrderCounts>? _ordersSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    final dataSource = widget.dataSource ?? FirestoreDashboardDataSource();
+
+    _usersSubscription = dataSource.watchCustomerCount().listen(
+      (snapshot) {
+        if (!mounted) return;
+        setState(() {
+          _customerCount = snapshot;
+          _usersError = null;
+        });
+      },
+      onError: (Object error) {
+        if (!mounted) return;
+        setState(() => _usersError = error);
+      },
+    );
+
+    _ordersSubscription = dataSource.watchOrderCounts().listen(
+      (counts) {
+        if (!mounted) return;
+        setState(() {
+          _totalOrdersCount = counts.total;
+          _pendingOrdersCount = counts.pending;
+          _onRouteOrdersCount = counts.onRoute;
+          _deliveredOrdersCount = counts.delivered;
+          _ordersError = null;
+        });
+      },
+      onError: (Object error) {
+        if (!mounted) return;
+        setState(() => _ordersError = error);
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _usersSubscription?.cancel();
+    _ordersSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildDashboardView(),
 
             // Tab 1: Products / Inventory
-            const ProductsScreen(),
+            ProductsScreen(dataSource: widget.productsDataSource),
 
             // Tab 2: Riders (Placeholder for next screen)
             _buildPlaceholderView(
@@ -97,29 +158,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Alert Banner
-                AlertBanner(
-                  text: '28 new orders are waiting for review',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Opening pending orders for review...'),
-                        backgroundColor: AppColors.cardSurface,
-                      ),
-                    );
-                  },
-                ),
+                _buildDashboardDataStatus(),
                 const SizedBox(height: 16),
 
-                // 2x2 KPI Cards
+                // Dashboard totals
                 Row(
                   children: [
                     Expanded(
                       child: KpiCard(
                         icon: Icons.inventory_2_outlined,
                         title: 'New Orders',
-                        value: '28',
-                        subtitle: 'Pending acceptance',
+                        value: _formatCount(_pendingOrdersCount),
+                        subtitle: 'Pending · not selected',
                         subtitleColor: AppColors.warning,
                         onTap: () {},
                       ),
@@ -127,28 +177,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: KpiCard(
-                        icon: Icons.two_wheeler_rounded,
-                        title: 'Active Riders',
-                        value: '14',
-                        subtitle: 'Total · 8 on route',
-                        subtitleColor: AppColors.success,
-                        onTap: () {
-                          setState(() {
-                            _currentTab = 2; // Switch to Riders tab
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: KpiCard(
                         icon: Icons.people_outline_rounded,
                         title: 'Registered Customers',
-                        value: '1,240',
+                        value: _formatCount(_customerCount),
                         subtitle: 'Customer accounts',
                         subtitleColor: AppColors.primaryAccentLight,
                         onTap: () {
@@ -158,18 +189,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: KpiCard(
-                        icon: Icons.account_balance_wallet_outlined,
-                        title: 'Current Sales Revenue',
-                        value: r'$1,450',
-                        subtitle: "Today's sales",
-                        subtitleColor: AppColors.primaryAccentLight,
-                        onTap: () {},
-                      ),
-                    ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                KpiCard(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Total Orders',
+                  value: _formatCount(_totalOrdersCount),
+                  subtitle: 'All order statuses',
+                  subtitleColor: AppColors.primaryAccentLight,
                 ),
                 const SizedBox(height: 16),
 
@@ -205,6 +233,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 // Active Orders Card
                 ActiveOrdersCard(
+                  pendingCount: _pendingOrdersCount,
+                  onRouteCount: _onRouteOrdersCount,
+                  deliveredCount: _deliveredOrdersCount,
                   onViewAll: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -220,6 +251,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  String _formatCount(int? count) => count?.toString() ?? '—';
+
+  Widget _buildDashboardDataStatus() {
+    final errors = [
+      if (_usersError != null) 'Users: $_usersError',
+      if (_ordersError != null) 'Orders: $_ordersError',
+    ];
+
+    if (errors.isNotEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.5)),
+        ),
+        child: Text(
+          'Could not load live dashboard data.\n${errors.join('\n')}',
+          style: const TextStyle(color: AppColors.warning, fontSize: 12),
+        ),
+      );
+    }
+
+    final pendingCount = _pendingOrdersCount;
+    if (_customerCount == null ||
+        _totalOrdersCount == null ||
+        pendingCount == null) {
+      return const LinearProgressIndicator(minHeight: 2);
+    }
+
+    return AlertBanner(
+      text:
+          '$pendingCount new ${pendingCount == 1 ? 'order is' : 'orders are'} waiting for review',
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Opening pending orders for review...'),
+            backgroundColor: AppColors.cardSurface,
+          ),
+        );
+      },
     );
   }
 
@@ -352,11 +428,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: AppColors.cardBorder.withValues(alpha: 0.5),
                 ),
               ),
-              child: Icon(
-                icon,
-                size: 48,
-                color: AppColors.primaryAccentLight,
-              ),
+              child: Icon(icon, size: 48, color: AppColors.primaryAccentLight),
             ),
             const SizedBox(height: 20),
             Text(

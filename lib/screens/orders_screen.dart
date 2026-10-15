@@ -7,11 +7,21 @@ import 'order_details_screen.dart';
 class OrdersScreen extends StatefulWidget {
   final OrdersDataSource? dataSource;
   final OrderStatusFilter initialFilter;
+  final String? customerId;
+  final String? customerName;
+  final String? riderId;
+  final String? riderPhone;
+  final String? riderName;
 
   const OrdersScreen({
     super.key,
     this.dataSource,
     this.initialFilter = OrderStatusFilter.all,
+    this.customerId,
+    this.customerName,
+    this.riderId,
+    this.riderPhone,
+    this.riderName,
   });
 
   @override
@@ -30,7 +40,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
     super.initState();
     _selectedFilter = widget.initialFilter;
     _dataSource = widget.dataSource ?? FirestoreOrdersDataSource();
-    _ordersStream = _dataSource.watchOrders();
+    _ordersStream = _dataSource.watchOrders(
+      customerId: widget.customerId,
+      riderId: widget.riderId,
+      riderPhone: widget.riderPhone,
+    );
   }
 
   @override
@@ -46,9 +60,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.backgroundPrimary,
         foregroundColor: AppColors.textPrimary,
-        title: const Text(
-          'Orders',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          widget.riderName != null
+              ? '${widget.riderName} · Deliveries'
+              : widget.customerName != null
+              ? '${widget.customerName} · Orders'
+              : 'Orders',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -327,125 +345,133 @@ class _OrderCard extends StatelessWidget {
             ),
           ),
           child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Order #${order.id}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Order #${order.id}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (order.customerName != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            order.customerName!,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                        if (order.createdAt != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatDate(order.createdAt!),
+                            style: const TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      order.status,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (order.customerName != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        order.customerName!,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                    if (order.createdAt != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDate(order.createdAt!),
-                        style: const TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  order.status,
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: AppColors.cardBorder),
+              if (order.items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 14),
+                  child: Text(
+                    'Product details are not available for this order.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                )
+              else
+                ...order.items.map(_buildItem),
+              const SizedBox(height: 12),
+              const Divider(height: 1, color: AppColors.cardBorder),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text(
+                    '${order.items.length} ${order.items.length == 1 ? 'product' : 'products'}'
+                    ' · ${order.items.fold<int>(0, (total, item) => total + item.quantity)} items',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Text(
+                    'Total ',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                  Text(
+                    orderTotal == null
+                        ? 'PKR —'
+                        : 'PKR ${_formatNumber(orderTotal)}',
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+              if (onCancel != null) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: onCancel,
+                    icon: const Icon(Icons.cancel_outlined, size: 18),
+                    label: const Text('Cancel order'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.warning,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: AppColors.cardBorder),
-          if (order.items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 14),
-              child: Text(
-                'Product details are not available for this order.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              ),
-            )
-          else
-            ...order.items.map(_buildItem),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.cardBorder),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Text(
-                '${order.items.length} ${order.items.length == 1 ? 'product' : 'products'}'
-                ' · ${order.items.fold<int>(0, (total, item) => total + item.quantity)} items',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-              const Spacer(),
-              const Text(
-                'Total ',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              ),
-              Text(
-                orderTotal == null
-                    ? 'PKR —'
-                    : 'PKR ${_formatNumber(orderTotal)}',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-          if (onCancel != null) ...[
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onCancel,
-                icon: const Icon(Icons.cancel_outlined, size: 18),
-                label: const Text('Cancel order'),
-                style: TextButton.styleFrom(foregroundColor: AppColors.warning),
-              ),
-            ),
-          ],
-        ],
-      ),
         ),
       ),
     );

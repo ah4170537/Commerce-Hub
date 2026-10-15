@@ -99,6 +99,22 @@ void main() {
       );
       expect(order.riderId, 'rider-7');
     });
+
+    test('resolves the owning customer from the order document', () {
+      final order = StoreOrder.fromDocument('order-456', {
+        'userId': 'customer-123',
+      }, ownerId: 'customer-123');
+
+      expect(order.customerId, 'customer-123');
+    });
+
+    test('uses the owning user document as the customer ID', () {
+      final order = StoreOrder.fromDocument('order-456', {
+        'userId': 'stale-user-id',
+      }, ownerId: 'customer-123');
+
+      expect(order.customerId, 'customer-123');
+    });
   });
 
   group('RiderDetails.fromDocument', () {

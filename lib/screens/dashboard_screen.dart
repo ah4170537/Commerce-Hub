@@ -1,12 +1,15 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
 import '../services/categories_repository.dart';
+import '../services/customers_data_source.dart';
 import '../services/dashboard_data_source.dart';
 import '../services/orders_data_source.dart';
 import '../services/products_data_source.dart';
+import '../services/riders_data_source.dart';
 import '../widgets/alert_banner.dart';
 import '../widgets/kpi_card.dart';
 import '../widgets/order_fulfillment_card.dart';
@@ -16,18 +19,24 @@ import '../widgets/custom_bottom_nav.dart';
 import 'products_screen.dart';
 import 'broadcast_screen.dart';
 import 'categories_screen.dart';
+import 'customers_screen.dart';
 import 'orders_screen.dart';
+import 'riders_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final DashboardDataSource? dataSource;
   final ProductsDataSource? productsDataSource;
   final CategoriesRepository? categoriesRepository;
+  final CustomersDataSource? customersDataSource;
+  final RidersDataSource? ridersDataSource;
 
   const DashboardScreen({
     super.key,
     this.dataSource,
     this.productsDataSource,
     this.categoriesRepository,
+    this.customersDataSource,
+    this.ridersDataSource,
   });
 
   @override
@@ -124,24 +133,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 else
                   const SizedBox.shrink(),
 
-                // Tab 3: Riders (Placeholder for next screen)
+                // Tab 3: Riders
                 if (_visitedTabs.contains(3))
-                  _buildPlaceholderView(
-                    title: 'Riders Control',
-                    subtitle: 'Manage rider fleet, active routes & documents',
-                    icon: Icons.two_wheeler_rounded,
-                  )
+                  RidersScreen(dataSource: widget.ridersDataSource)
                 else
                   const SizedBox.shrink(),
 
-                // Tab 4: Customers (Placeholder for next screen)
+                // Tab 4: Customers
                 if (_visitedTabs.contains(4))
-                  _buildPlaceholderView(
-                    title: 'Customer Management',
-                    subtitle:
-                        'Manage registered users, order histories & disputes',
-                    icon: Icons.people_outline_rounded,
-                  )
+                  CustomersScreen(dataSource: widget.customersDataSource)
                 else
                   const SizedBox.shrink(),
               ],
@@ -464,6 +464,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
 
           // Notification Bell with Badge Dot
+          IconButton(
+            tooltip: 'Sign out',
+            onPressed: () async {
+              try {
+                await FirebaseAuth.instance.signOut();
+              } catch (error) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Could not sign out: $error')),
+                );
+              }
+            },
+            icon: const Icon(
+              Icons.logout_rounded,
+              color: AppColors.textPrimary,
+            ),
+          ),
           InkWell(
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -501,54 +518,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// Placeholder for tabs under development
-  Widget _buildPlaceholderView({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-  }) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.cardSurface,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.cardBorder.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Icon(icon, size: 48, color: AppColors.primaryAccentLight),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
       ),
     );
   }

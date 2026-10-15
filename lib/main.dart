@@ -2,16 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'constants/app_colors.dart';
 import 'firebase_options.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/admin_auth_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env', isOptional: true);
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Set system navigation and status bar style to match the dark theme
   SystemChrome.setSystemUIOverlayStyle(
@@ -53,7 +52,7 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const DashboardScreen(),
+      home: const AdminAuthGate(),
     );
   }
 }

@@ -14,9 +14,10 @@ class OrderItemPart {
   });
 
   factory OrderItemPart.fromMap(Map<String, dynamic> data, int index) {
-    final quantity = _numberValue(
-      data['quantity'] ?? data['qty'] ?? data['count'] ?? 1,
-    )?.toInt() ?? 1;
+    final quantity =
+        _numberValue(data['quantity'] ?? data['qty'] ?? data['count'] ?? 1)
+            ?.toInt() ??
+        1;
 
     return OrderItemPart(
       name:
@@ -105,6 +106,7 @@ class StoreOrder {
   final String? riderName;
   final String? riderPhone;
   final String? riderId;
+  final String? customerId;
   final DateTime? createdAt;
   final List<OrderItem> items;
   final num? total;
@@ -120,6 +122,7 @@ class StoreOrder {
     required this.riderName,
     required this.riderPhone,
     required this.riderId,
+    required this.customerId,
     required this.createdAt,
     required this.items,
     required this.total,
@@ -128,9 +131,10 @@ class StoreOrder {
 
   factory StoreOrder.fromDocument(
     String documentId,
-    Map<String, dynamic> data,
-    {DocumentReference<Map<String, dynamic>>? reference}
-  ) {
+    Map<String, dynamic> data, {
+    DocumentReference<Map<String, dynamic>>? reference,
+    String? ownerId,
+  }) {
     final riderValue = data['rider'] ?? data['deliveryRider'];
     final riderData = riderValue is Map
         ? Map<String, dynamic>.from(riderValue)
@@ -159,16 +163,12 @@ class StoreOrder {
             data['fullName'] ??
             data['name'],
       ),
-      customerEmail: _stringValue(
-        data['customerEmail'] ?? data['email'],
-      ),
+      customerEmail: _stringValue(data['customerEmail'] ?? data['email']),
       customerPhone: _stringValue(
         data['customerPhone'] ?? data['phoneNumber'] ?? data['phone'],
       ),
       deliveryAddress: _addressValue(
-        data['deliveryAddress'] ??
-            data['shippingAddress'] ??
-            data['address'],
+        data['deliveryAddress'] ?? data['shippingAddress'] ?? data['address'],
         city: data['city'],
         state: data['state'],
         postalCode: data['postalCode'],
@@ -193,6 +193,14 @@ class StoreOrder {
             data['riderId'] ??
             data['riderUid'],
       ),
+      customerId:
+          ownerId ??
+          _stringValue(
+            data['customerId'] ??
+                data['customerUid'] ??
+                data['userId'] ??
+                data['userUid'],
+          ),
       createdAt: _dateTimeValue(
         data['createdAt'] ?? data['orderDate'] ?? data['timestamp'],
       ),
@@ -294,7 +302,11 @@ enum OrderStatusFilter {
 }
 
 abstract interface class OrdersDataSource {
-  Stream<List<StoreOrder>> watchOrders();
+  Stream<List<StoreOrder>> watchOrders({
+    String? customerId,
+    String? riderId,
+    String? riderPhone,
+  });
   Future<void> cancelOrder(StoreOrder order);
 }
 
@@ -305,7 +317,12 @@ class FirestoreOrdersDataSource implements OrdersDataSource {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   @override
-  Stream<List<StoreOrder>> watchOrders() {
+  Stream<List<StoreOrder>> watchOrders({
+    String? customerId,
+    String? riderId,
+    String? riderPhone,
+  }) {
+    final normalizedRiderPhone = riderPhone?.trim().toLowerCase();
     return _firestore
         .collectionGroup('user_orders')
         .snapshots()
@@ -313,12 +330,22 @@ class FirestoreOrdersDataSource implements OrdersDataSource {
           (snapshot) =>
               snapshot.docs
                   .map(
-                    (document) =>
-                        StoreOrder.fromDocument(
-                          document.id,
-                          document.data(),
-                          reference: document.reference,
-                        ),
+                    (document) => StoreOrder.fromDocument(
+                      document.id,
+                      document.data(),
+                      reference: document.reference,
+                      ownerId: document.reference.parent.parent?.id,
+                    ),
+                  )
+                  .where(
+                    (order) =>
+                        (customerId == null ||
+                            order.customerId == customerId) &&
+                        ((riderId == null && normalizedRiderPhone == null) ||
+                            (riderId != null && order.riderId == riderId) ||
+                            (normalizedRiderPhone != null &&
+                                order.riderPhone?.trim().toLowerCase() ==
+                                    normalizedRiderPhone)),
                   )
                   .toList()
                 ..sort((first, second) {
@@ -345,7 +372,9 @@ class FirestoreOrdersDataSource implements OrdersDataSource {
       final snapshot = await transaction.get(reference);
       final status = _stringValue(snapshot.data()?['status'])?.toLowerCase();
       if (status != 'placed' && status != 'pending') {
-        throw StateError('This order is no longer pending and cannot be cancelled.');
+        throw StateError(
+          'This order is no longer pending and cannot be cancelled.',
+        );
       }
       transaction.update(reference, {'status': 'Cancelled'});
     });
@@ -395,9 +424,12 @@ String? _addressValue(
     );
   }
 
-  for (final part in [city, state, postalCode, country]
-      .map(_stringValue)
-      .whereType<String>()) {
+  for (final part in [
+    city,
+    state,
+    postalCode,
+    country,
+  ].map(_stringValue).whereType<String>()) {
     if (!addressParts.join(', ').toLowerCase().contains(part.toLowerCase())) {
       addressParts.add(part);
     }

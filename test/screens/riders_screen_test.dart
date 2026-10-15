@@ -1,6 +1,5 @@
 import 'package:commerce_hub/screens/riders_screen.dart';
 import 'package:commerce_hub/services/orders_data_source.dart';
-import 'package:commerce_hub/services/rider_blocking_service.dart';
 import 'package:commerce_hub/services/riders_data_source.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,15 +11,6 @@ class _FakeRidersDataSource implements RidersDataSource {
 
   @override
   Stream<List<StoreRider>> watchRiders() => Stream.value(riders);
-}
-
-class _FakeRiderBlockingService implements RiderBlockingService {
-  String? blockedRiderId;
-
-  @override
-  Future<void> blockRider(String riderId) async {
-    blockedRiderId = riderId;
-  }
 }
 
 class _FakeOrdersDataSource implements OrdersDataSource {
@@ -109,26 +99,20 @@ void main() {
     expect(find.text("Rider's deliveries"), findsOneWidget);
   });
 
-  testWidgets('confirms and blocks the selected rider', (tester) async {
-    final blockingService = _FakeRiderBlockingService();
-
+  testWidgets('keeps rider block button without performing a block', (
+    tester,
+  ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: RiderDetailsScreen(
-          rider: _rider(),
-          blockingService: blockingService,
-        ),
-      ),
+      MaterialApp(home: RiderDetailsScreen(rider: _rider())),
     );
 
     await tester.tap(find.text('Block rider'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Block rider'));
-    await tester.pumpAndSettle();
 
-    expect(blockingService.blockedRiderId, 'rider-7');
-    expect(find.text('Rider blocked'), findsOneWidget);
-    expect(find.text('Blocked'), findsOneWidget);
+    expect(find.text('Block rider'), findsOneWidget);
+    expect(find.text('Block this rider?'), findsNothing);
+    expect(find.text('Blocked'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets("opens only this rider's delivered orders", (tester) async {

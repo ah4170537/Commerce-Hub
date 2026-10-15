@@ -48,7 +48,7 @@ class CustomerDetailsScreen extends StatelessWidget {
       decoration: _cardDecoration(),
       child: Column(
         children: [
-          _buildAvatar(88),
+          _buildAvatar(customer, 88),
           const SizedBox(height: 14),
           Text(
             customer.name,
@@ -64,7 +64,7 @@ class CustomerDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar(double size) {
+  Widget _buildAvatar(StoreCustomer customer, double size) {
     final imageUrl = customer.imageUrl;
     final fallback = CircleAvatar(
       radius: size / 2,
@@ -95,6 +95,19 @@ class CustomerDetailsScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SizedBox(
+          height: 48,
+          child: OutlinedButton.icon(
+            onPressed: () {},
+            icon: const Icon(Icons.block_outlined),
+            label: const Text('Block customer'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.warning,
+              side: const BorderSide(color: AppColors.warning),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         SizedBox(
           height: 48,
           child: FilledButton.icon(

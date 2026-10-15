@@ -71,6 +71,32 @@ void main() {
     expect(find.text('https://example.com/private-profile.jpg'), findsNothing);
     expect(find.text('private-fcm-token'), findsNothing);
     expect(find.text("User's orders"), findsOneWidget);
+    expect(find.text('Block customer'), findsOneWidget);
+  });
+
+  testWidgets('keeps customer block button without performing a block', (
+    tester,
+  ) async {
+    final customer = StoreCustomer(
+      id: 'customer-123',
+      name: 'Alex Rivera',
+      email: null,
+      phone: null,
+      imageUrl: null,
+      createdAt: null,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: CustomerDetailsScreen(customer: customer)),
+    );
+
+    await tester.tap(find.text('Block customer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Block customer'), findsOneWidget);
+    expect(find.text('Block this customer?'), findsNothing);
+    expect(find.text('Blocked'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets("opens this customer's filtered orders", (tester) async {

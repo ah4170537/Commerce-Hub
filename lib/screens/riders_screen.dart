@@ -3,21 +3,14 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
 import '../services/orders_data_source.dart';
-import '../services/rider_blocking_service.dart';
 import '../services/riders_data_source.dart';
 import 'orders_screen.dart';
 
 class RidersScreen extends StatefulWidget {
   final RidersDataSource? dataSource;
-  final RiderBlockingService? blockingService;
   final OrdersDataSource? ordersDataSource;
 
-  const RidersScreen({
-    super.key,
-    this.dataSource,
-    this.blockingService,
-    this.ordersDataSource,
-  });
+  const RidersScreen({super.key, this.dataSource, this.ordersDataSource});
 
   @override
   State<RidersScreen> createState() => _RidersScreenState();
@@ -119,7 +112,6 @@ class _RidersScreenState extends State<RidersScreen> {
                         MaterialPageRoute<void>(
                           builder: (context) => RiderDetailsScreen(
                             rider: filteredRiders[index],
-                            blockingService: widget.blockingService,
                             ordersDataSource: widget.ordersDataSource,
                           ),
                         ),
@@ -226,7 +218,6 @@ class _RiderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isBlocked = rider.details['isBlocked'] == true;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
@@ -271,17 +262,13 @@ class _RiderCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        isBlocked
-                            ? 'Rider blocked'
-                            : rider.createdAt == null
+                        rider.createdAt == null
                             ? 'Rider ID · ${rider.id}'
                             : 'Joined ${_formatDate(rider.createdAt!)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isBlocked
-                              ? AppColors.warning
-                              : AppColors.textMuted,
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
                           fontSize: 11,
                         ),
                       ),
@@ -390,13 +377,11 @@ class _RiderContact extends StatelessWidget {
 
 class RiderDetailsScreen extends StatefulWidget {
   final StoreRider rider;
-  final RiderBlockingService? blockingService;
   final OrdersDataSource? ordersDataSource;
 
   const RiderDetailsScreen({
     super.key,
     required this.rider,
-    this.blockingService,
     this.ordersDataSource,
   });
 
@@ -405,65 +390,6 @@ class RiderDetailsScreen extends StatefulWidget {
 }
 
 class _RiderDetailsScreenState extends State<RiderDetailsScreen> {
-  late bool _isBlocked = widget.rider.details['isBlocked'] == true;
-  bool _isBlocking = false;
-
-  Future<void> _confirmAndBlock() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.cardSurface,
-        title: const Text(
-          'Block this rider?',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: Text(
-          '${widget.rider.name} will be signed out of the rider app.',
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.warning,
-              foregroundColor: AppColors.textPrimary,
-            ),
-            child: const Text('Block rider'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isBlocking = true);
-    try {
-      await (widget.blockingService ?? FirestoreRiderBlockingService())
-          .blockRider(widget.rider.id);
-      if (!mounted) return;
-      setState(() => _isBlocked = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Rider blocked.'),
-          backgroundColor: AppColors.cardSurface,
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not block rider: $error'),
-          backgroundColor: AppColors.cardSurface,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isBlocking = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final riderName = widget.rider.name.isEmpty ? 'Rider' : widget.rider.name;
@@ -508,16 +434,6 @@ class _RiderDetailsScreenState extends State<RiderDetailsScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          if (_isBlocked) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Blocked',
-              style: TextStyle(
-                color: AppColors.warning,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -530,20 +446,9 @@ class _RiderDetailsScreenState extends State<RiderDetailsScreen> {
         SizedBox(
           height: 48,
           child: OutlinedButton.icon(
-            onPressed: _isBlocking || _isBlocked ? null : _confirmAndBlock,
-            icon: _isBlocking
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.block_outlined),
-            label: Text(
-              _isBlocking
-                  ? 'Blocking rider…'
-                  : _isBlocked
-                  ? 'Rider blocked'
-                  : 'Block rider',
-            ),
+            onPressed: () {},
+            icon: const Icon(Icons.block_outlined),
+            label: const Text('Block rider'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.warning,
               side: const BorderSide(color: AppColors.warning),

@@ -38,7 +38,8 @@ A successful block response includes `notification.sent`. If the target has no
 1. Push this directory to GitHub. It can be in its own repository or alongside
    the app; if alongside the app, set Vercel's **Root Directory** to
    `block-backend`.
-2. Import the repository in Vercel as a Node.js project.
+2. Import the repository in Vercel as a Node.js project. The project uses
+   Node.js 24, which is selected by `package.json`.
 3. In Vercel project settings, add the environment variable
    `FIREBASE_SERVICE_ACCOUNT_JSON` for the Production environment (and Preview
    if needed). Its value must be the full JSON of a Firebase service-account
